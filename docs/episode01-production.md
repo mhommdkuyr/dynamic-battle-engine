@@ -14,6 +14,11 @@ Keep character and motion data out of this public repository. Prepare an authori
 - `mocap/Superhero/SuperHeroLanding_Takeoff_mixamo.fbx`
 - `mocap/Superhero/SuperHeroFlying_mixamo.fbx`
 - `mocap/Superhero/HulkTransformation_mixamo.fbx`
+- `mocap/MagicPack/Mixamo/DrStrangeMagic_mixamo.fbx`
+- `mocap/MagicPack/Mixamo/Fireballs_mixamo.fbx`
+- `mocap/MagicPack/Mixamo/GiantEnergyBlast_mixamo.fbx`
+- `mocap/MagicPack/Mixamo/MagicShields_mixamo.fbx`
+- `mocap/MagicPack/Mixamo/MagicExplosion_mixamo.fbx`
 
 Set `ANIME_ASSET_DIR` to the directory containing those files. The GitHub Actions path is gated by the repository secret `ANIME_ASSETS_BUNDLE_URL`, an authorized HTTPS URL for that ZIP. The workflow deliberately runs script/unit tests without producing a fake video when the secret is absent.
 
@@ -26,7 +31,7 @@ pip install -r requirements.txt edge-tts
 ANIME_ASSET_DIR=/path/to/private-assets bash scripts/finalize_episode.sh
 ```
 
-The scene uses the Nightshade and Prisoner skinned FBX models; retimes compatible Mixamo bone channels from the supplied motion clips into Blender NLA tracks; creates a ruined, rain-soaked arena, timed energy slashes, collision sparks, expanding shockwaves, title cards, and a moving camera; renders 1280x720 at 12 fps; synthesizes a 60-second score/SFX bed and Japanese dialogue; then uses FFmpeg motion interpolation and Lanczos scaling to deliver a 1920x1080, 60 fps MP4 with English/Arabic subtitles.
+The scene uses the Nightshade and Prisoner skinned FBX models; retimes compatible Mixamo bone channels from the supplied motion clips into Blender NLA tracks; creates a ruined, rain-soaked arena, timed energy slashes, collision sparks, expanding shockwaves, title cards, and a moving camera; uses additional Dr Strange-style spell-casting, fireball, giant-energy-blast, shield, and magic-explosion body-action clips from the supplied motion archive; renders 1280x720 at 12 fps; synthesizes a 60-second score/SFX bed and Japanese dialogue; then uses FFmpeg motion interpolation and Lanczos scaling to deliver a 1920x1080, 60 fps MP4 with English/Arabic subtitles.
 
 ## Important quality note
 
@@ -38,5 +43,7 @@ The render is a textured 3D anime-inspired action short and a reproducible basel
 - [Rokoko retargeting guide](https://support.rokoko.com/hc/en-us/articles/4410463481489-Retarget-an-animation-in-Blender) — source/target pose and scale guidance.
 - [AnimateDiff-Evolved](https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved) — optional frame stylization/motion branch for a GPU-equipped ComfyUI host.
 - [CogVideoX wrapper](https://github.com/kijai/ComfyUI-CogVideoXWrapper) — optional image/video generation branch; not required for the deterministic Blender render.
+- [CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu/) — additional research motion source with thousands of trials; verify and follow its non-redistribution-of-raw-data terms before using clips in a release.
+- [Adobe Mixamo FAQ](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) — official usage notes for biped animation clips.
 
 Respect each asset and motion pack's own license and terms before redistribution.

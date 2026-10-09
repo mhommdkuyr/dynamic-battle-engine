@@ -5,8 +5,23 @@ cd "$ROOT"
 mkdir -p audio output/frames
 : "${ANIME_ASSET_DIR:=$ROOT/assets/private}"
 export ANIME_ASSET_DIR
-for f in "$ANIME_ASSET_DIR/nightshade.fbx" "$ANIME_ASSET_DIR/prisoner.fbx" "$ANIME_ASSET_DIR/mocap/Superhero/IronMan_Combat_mixamo.fbx"; do
-  if [[ ! -f "$f" ]]; then echo "Required private asset missing: $f" >&2; exit 2; fi
+required=(
+  "$ANIME_ASSET_DIR/nightshade.fbx"
+  "$ANIME_ASSET_DIR/prisoner.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/WatchOverCity_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/IronMan_Combat_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/MutantClaws_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/SuperHeroLanding_Takeoff_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/SuperHeroFlying_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/Superhero/HulkTransformation_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/MagicPack/Mixamo/DrStrangeMagic_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/MagicPack/Mixamo/Fireballs_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/MagicPack/Mixamo/GiantEnergyBlast_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/MagicPack/Mixamo/MagicShields_mixamo.fbx"
+  "$ANIME_ASSET_DIR/mocap/MagicPack/Mixamo/MagicExplosion_mixamo.fbx"
+)
+for f in "${required[@]}"; do
+  if [[ ! -s "$f" ]]; then echo "Required private asset missing: $f" >&2; exit 2; fi
 done
 python3 scripts/make_episode_audio.py
 edge-tts --voice ja-JP-KeitaNeural --rate=-12% --pitch=-12Hz --text '鎖を解いたところで、貴様はただの野獣に過ぎん。' --write-media audio/nightshade_open.mp3

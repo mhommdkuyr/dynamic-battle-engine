@@ -54,6 +54,16 @@ jobs:
           test -s assets/private/nightshade.fbx
           test -s assets/private/prisoner.fbx
           test -s assets/private/mocap/Superhero/IronMan_Combat_mixamo.fbx
+          test -s assets/private/mocap/Superhero/WatchOverCity_mixamo.fbx
+          test -s assets/private/mocap/Superhero/MutantClaws_mixamo.fbx
+          test -s assets/private/mocap/Superhero/SuperHeroLanding_Takeoff_mixamo.fbx
+          test -s assets/private/mocap/Superhero/SuperHeroFlying_mixamo.fbx
+          test -s assets/private/mocap/Superhero/HulkTransformation_mixamo.fbx
+          test -s assets/private/mocap/MagicPack/Mixamo/DrStrangeMagic_mixamo.fbx
+          test -s assets/private/mocap/MagicPack/Mixamo/Fireballs_mixamo.fbx
+          test -s assets/private/mocap/MagicPack/Mixamo/GiantEnergyBlast_mixamo.fbx
+          test -s assets/private/mocap/MagicPack/Mixamo/MagicShields_mixamo.fbx
+          test -s assets/private/mocap/MagicPack/Mixamo/MagicExplosion_mixamo.fbx
       - name: Render, score, interpolate, subtitle and encode 1080p60 final
         if: env.ANIME_ASSETS_BUNDLE_URL != ''
         env:
