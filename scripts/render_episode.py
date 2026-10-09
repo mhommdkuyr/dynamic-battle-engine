@@ -41,9 +41,9 @@ def action_from(rel,name,bones):
  return act
 def segment(arm,act,start,duration,fps,label):
  tr=arm.animation_data.nla_tracks.new(); tr.name=label[:60]; fr=1+round(start*fps); length=max(2,round(duration*fps)); st=tr.strips.new(label,fr,act); st.action_frame_start=act.frame_range[0]; st.action_frame_end=act.frame_range[1]; st.scale=length/max(1,st.action_frame_end-st.action_frame_start); st.blend_type='REPLACE'; st.extrapolation='NOTHING'; st.blend_in=min(8,length*.06); st.blend_out=min(8,length*.06)
-def root_keys(root,rows,fps):
+def root_keys(root,rows,fps,base_rot=0.0):
  for t,loc,rz in rows:
-  f=1+round(t*fps); root.location=loc; root.rotation_euler.z=rz; root.keyframe_insert(data_path='location',frame=f); root.keyframe_insert(data_path='rotation_euler',frame=f)
+  f=1+round(t*fps); root.location=loc; root.rotation_euler.z=base_rot+rz; root.keyframe_insert(data_path='location',frame=f); root.keyframe_insert(data_path='rotation_euler',frame=f)
  if root.animation_data and root.animation_data.action:
   for fc in root.animation_data.action.fcurves:
    for k in fc.keyframe_points:k.interpolation='BEZIER'
@@ -80,7 +80,7 @@ def make_arena(fps):
  return {'cyan':cyan,'violet':violet,'white':white}
 def make_camera(fps):
  bpy.ops.object.camera_add(location=(0,-10.5,3)); c=bpy.context.object;c.name='Cinematic_Anime_Camera';c.data.lens=48;bpy.context.scene.camera=c
- shots=[(0,(0,-10.8,3),(0,0,1.15),45),(7,(0,-9,2.4),(0,0,1.15),49),(12,(0,-7.8,2.2),(0,0,1.2),54),(16,(-.65,-6.4,2),(0,0,1.3),60),(23,(.55,-6.6,2.6),(0,0,1.25),52),(28,(0,-8.2,3.6),(0,0,1.6),45),(32,(.7,-6.2,4),(0,0,1.9),52),(39,(-.3,-6.8,3),(0,0,1.8),49),(44,(0,-7.6,2.2),(0,0,1.25),56),(49,(0,-5.2,2),(0,0,1.4),62),(50.5,(0,-4.4,2.1),(0,0,1.45),68),(54,(0,-7.4,2.6),(0,0,1.15),52),(60,(0,-8.2,2.6),(0,0,1.2),48)]
+ shots=[(0,(0,-10.8,3),(0,0,1.15),45),(7,(0,-9,2.4),(0,0,1.15),49),(12,(0,-7.8,2.2),(0,0,1.2),54),(16,(-.45,-5.8,2),(0,0,1.3),60),(23,(.35,-5.9,2.4),(0,0,1.25),52),(28,(0,-6.7,3.3),(0,0,1.6),45),(32,(.7,-6.2,4),(0,0,1.9),52),(39,(-.3,-6.8,3),(0,0,1.8),49),(44,(0,-7.6,2.2),(0,0,1.25),56),(49,(0,-5.2,2),(0,0,1.4),62),(50.5,(0,-4.4,2.1),(0,0,1.45),68),(54,(0,-7.4,2.6),(0,0,1.15),52),(60,(0,-8.2,2.6),(0,0,1.2),48)]
  for sec,loc,look,lens in shots:
   f=1+round(sec*fps);c.location=loc;c.rotation_euler=(Vector(look)-c.location).to_track_quat('-Z','Y').to_euler();c.keyframe_insert(data_path='location',frame=f);c.keyframe_insert(data_path='rotation_euler',frame=f);c.data.lens=lens;c.data.keyframe_insert(data_path='lens',frame=f)
  for d in (c.animation_data,c.data.animation_data):
@@ -93,14 +93,14 @@ def add_text(body,name,loc,size,material,start,end,fps):
 def main():
  bpy.ops.wm.read_factory_settings(use_empty=True);scene=bpy.context.scene;fps=a.fps;scene.render.engine='BLENDER_WORKBENCH';scene.render.resolution_x=a.width;scene.render.resolution_y=a.height;scene.render.resolution_percentage=100;scene.render.fps=fps;scene.render.fps_base=1;scene.render.image_settings.file_format='PNG';scene.render.image_settings.color_mode='RGB';scene.render.image_settings.color_depth='8';scene.render.film_transparent=False
  sh=scene.display.shading;sh.light='STUDIO'
- try:sh.studio_light='paint.sl'
+ try:sh.studio_light='outdoor.sl'
  except Exception:pass
  sh.color_type='TEXTURE';sh.show_shadows=True;sh.show_cavity=True;sh.cavity_type='BOTH';sh.curvature_ridge_factor=1.6;sh.curvature_valley_factor=1.2;sh.show_specular_highlight=True;sh.show_object_outline=True;sh.background_type='WORLD';scene.world=bpy.data.worlds.new('Midnight Storm');scene.world.color=(.006,.009,.02);scene.view_settings.view_transform='Standard';scene.view_settings.look='Medium High Contrast';scene.frame_start=1;scene.frame_end=round(a.duration*fps)
- n=character('nightshade.fbx','Nightshade',-1.85,0);p=character('prisoner.fbx','Prisoner',1.85,math.pi);bones=n['bones']&p['bones']; specs=[('Superhero/WatchOverCity_mixamo.fbx','LOOKOUT'),('Superhero/IronMan_Combat_mixamo.fbx','IRON_COMBAT'),('Superhero/MutantClaws_mixamo.fbx','CLAW_COMBAT'),('Superhero/SuperHeroLanding_Takeoff_mixamo.fbx','JUMP_LAND'),('Superhero/SuperHeroFlying_mixamo.fbx','HERO_FLIGHT'),('Superhero/HulkTransformation_mixamo.fbx','TITAN_ROAR')]; acts={name:action_from(path,name,bones) for path,name in specs}
+ n=character('nightshade.fbx','Nightshade',-1.35,math.radians(58));p=character('prisoner.fbx','Prisoner',1.35,math.radians(-58));bones=n['bones']&p['bones']; specs=[('Superhero/WatchOverCity_mixamo.fbx','LOOKOUT'),('Superhero/IronMan_Combat_mixamo.fbx','IRON_COMBAT'),('Superhero/MutantClaws_mixamo.fbx','CLAW_COMBAT'),('Superhero/SuperHeroLanding_Takeoff_mixamo.fbx','JUMP_LAND'),('Superhero/SuperHeroFlying_mixamo.fbx','HERO_FLIGHT'),('Superhero/HulkTransformation_mixamo.fbx','TITAN_ROAR')]; acts={name:action_from(path,name,bones) for path,name in specs}
  for who,rig,sequence in [('Nightshade',n,[('LOOKOUT',0,12),('IRON_COMBAT',12,16),('JUMP_LAND',28,7.5),('HERO_FLIGHT',35.5,8.5),('IRON_COMBAT',44,12)]),('Prisoner',p,[('TITAN_ROAR',0,12),('CLAW_COMBAT',12,16),('JUMP_LAND',28,8),('IRON_COMBAT',36,8),('TITAN_ROAR',44,16)])]:
   for name,start,dur in sequence:segment(rig['arm'],acts[name],start,dur,fps,who+'_'+name+'_'+str(start))
- root_keys(n['root'],[(0,(-1.85,0,0),0),(12,(-1.8,0,0),0),(15,(-.9,-.25,0),-.12),(20,(-1.15,-.15,0),.1),(25,(-1.65,0,0),0),(28,(-1.65,0,0),0),(31,(-.9,-.1,.45),-.2),(35,(-.4,-.25,.7),.15),(39,(-1.1,-.15,.2),-.2),(44,(-1.65,0,0),0),(47,(-.7,-.2,0),-.1),(50,(-.3,-.2,.05),.12),(52,(-.8,-.15,0),-.1),(54,(-1.75,0,0),0),(60,(-1.75,0,0),0)],fps)
- root_keys(p['root'],[(0,(1.85,0,0),math.pi),(12,(1.8,0,0),math.pi),(15,(.9,.05,0),math.pi+.12),(20,(1.2,0,0),math.pi-.1),(25,(1.65,0,0),math.pi),(28,(1.65,0,0),math.pi),(31,(.85,.1,.3),math.pi+.2),(35,(.5,0,.45),math.pi-.1),(39,(1.1,.05,.2),math.pi+.15),(44,(1.65,0,0),math.pi),(47,(.65,.1,0),math.pi+.1),(50,(.3,.05,.05),math.pi-.12),(52,(.8,0,0),math.pi+.1),(54,(1.75,0,0),math.pi),(60,(1.75,0,0),math.pi)],fps)
+ root_keys(n['root'],[(0,(-1.35,0,0),0),(6,(-1.33,0,0),0),(12,(-1.15,0,0),0),(15,(-.48,-.22,0),-.12),(20,(-.58,-.12,0),.1),(25,(-.82,0,0),0),(28,(-.72,0,0),0),(31,(-.28,-.1,.42),-.2),(35,(.02,-.2,.62),.15),(39,(-.28,-.15,.18),-.2),(44,(-.72,0,0),0),(47,(-.3,-.18,0),-.1),(50,(-.13,-.2,.05),.12),(52,(-.43,-.15,0),-.1),(54,(-1.3,0,0),0),(60,(-1.3,0,0),0)],fps,base_rot=math.radians(58))
+ root_keys(p['root'],[(0,(1.35,0,0),0),(6,(1.33,0,0),0),(12,(1.15,0,0),0),(15,(.48,.05,0),.12),(20,(.62,0,0),-.1),(25,(.82,0,0),0),(28,(.72,0,0),0),(31,(.28,.1,.28),.2),(35,(-.02,0,.42),-.1),(39,(.28,.05,.18),.15),(44,(.72,0,0),0),(47,(.3,.1,0),.1),(50,(.13,.05,.05),-.12),(52,(.43,0,0),.1),(54,(1.3,0,0),0),(60,(1.3,0,0),0)],fps,base_rot=math.radians(-58))
  effects=make_arena(fps);make_camera(fps);title=material('Title Pearl',(.72,.91,1),.1,.3);add_text('SHADOWS  &  IRON','Main_Title',(-2.15,-2.5,3.15),.43,title,.6,4.5,fps);add_text('EPISODE 01  /  BREAK THE CAGE','Sub_Title',(-1.8,-2.5,2.75),.16,effects['cyan'],1.0,4.2,fps);add_text('TO BE CONTINUED','End_Title',(-1.05,-2.5,2.9),.34,title,56,60,fps)
  os.makedirs(a.output,exist_ok=True);scene.render.filepath=os.path.join(a.output,'frame_');blend=os.path.join(a.output,'episode01_scene.blend');bpy.ops.wm.save_as_mainfile(filepath=blend);print('SCENE_READY',json.dumps({'fps':fps,'duration':a.duration,'frame_end':scene.frame_end,'resolution':[a.width,a.height],'characters':['Nightshade','Prisoner'],'motions':list(acts)}),flush=True);bpy.ops.render.render(animation=True);print('RENDER_COMPLETE',a.output,flush=True)
 if __name__=='__main__':main()
