@@ -1,47 +1,69 @@
-name: Render Combat Animation & Publish Video
+name: Real FBX Combat Episode Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  pull_request:
   workflow_dispatch:
-    inputs:
-      target_resolution:
-        description: 'Output resolution'
-        required: false
-        default: '1080p'
+
+permissions:
+  contents: read
 
 jobs:
-  render_combat_video:
+  validate-and-render:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANIME_ASSETS_BUNDLE_URL: ${{ secrets.ANIME_ASSETS_BUNDLE_URL }}
     steps:
-      - name: Checkout Code
+      - name: Checkout production code
         uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
+      - name: Install Blender and FFmpeg
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender ffmpeg
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install System FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-
-      - name: Install Python Rendering Dependencies
+          cache: pip
+      - name: Install engine requirements
         run: |
           python -m pip install --upgrade pip
-          pip install opencv-python-headless numpy scipy pillow pyyaml
-
-      - name: Run Combat Animation Engine
+          pip install -r requirements.txt edge-tts
+      - name: Validate render scripts and existing engine tests
         run: |
-          python scripts/run_render.py
-
-      - name: Upload Video Artifact (Ready for Publishing)
+          python -m py_compile scripts/render_episode.py scripts/make_episode_audio.py
+          bash -n scripts/finalize_episode.sh
+          python -m unittest discover -s tests -v
+      - name: Explain private-asset gate when no private bundle is configured
+        if: env.ANIME_ASSETS_BUNDLE_URL == ''
+        run: |
+          echo "Renderer/tests passed. No video was rendered because the character FBXs and mocap bundle are private and were not supplied to this runner."
+          echo "Configure the repository secret ANIME_ASSETS_BUNDLE_URL with an authorized HTTPS ZIP to enable full rendering."
+          echo "This job intentionally does not publish the old 2-second placeholder as a completed episode."
+      - name: Download private character and motion assets
+        if: env.ANIME_ASSETS_BUNDLE_URL != ''
+        env:
+          ASSET_URL: ${{ secrets.ANIME_ASSETS_BUNDLE_URL }}
+        run: |
+          set +x
+          mkdir -p assets/private
+          curl --fail --location --retry 2 "$ASSET_URL" -o "$RUNNER_TEMP/episode01-assets.zip"
+          unzip -q "$RUNNER_TEMP/episode01-assets.zip" -d assets/private
+          test -s assets/private/nightshade.fbx
+          test -s assets/private/prisoner.fbx
+          test -s assets/private/mocap/Superhero/IronMan_Combat_mixamo.fbx
+      - name: Render, score, interpolate, subtitle and encode 1080p60 final
+        if: env.ANIME_ASSETS_BUNDLE_URL != ''
+        env:
+          ANIME_ASSET_DIR: ${{ github.workspace }}/assets/private
+        run: bash scripts/finalize_episode.sh
+      - name: Upload the verified final MP4
+        if: success() && env.ANIME_ASSETS_BUNDLE_URL != ''
         uses: actions/upload-artifact@v4
         with:
-          name: combat-animation-60fps-ready-to-publish
-          path: |
-            output/*.mp4
-            output/*.png
+          name: Episode01-Shadows-and-Iron-Final-1080p60
+          path: output/Episode01_Shadows_and_Iron_Final_1080p60.mp4
+          if-no-files-found: error
           retention-days: 30

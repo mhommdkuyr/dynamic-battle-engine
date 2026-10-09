@@ -1,0 +1,22 @@
+import bpy, math, os, json, random, argparse, sys
+from mathutils import Vector
+p=argparse.ArgumentParser(); p.add_argument('--duration',type=float,default=60); p.add_argument('--fps',type=int,default=24); p.add_argument('--width',type=int,default=1280); p.add_argument('--height',type=int,default=720); p.add_argument('--output',default='/home/user/anime01/render'); p.add_argument('--seed',type=int,default=7319)
+a=p.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
+BASE=os.environ.get('ANIME_ASSET_DIR','/home/user/anime01'); MOT=os.path.join(BASE,'mocap'); random.seed(a.seed)
+def material(name,c,metal=0,rough=.4):
+ m=bpy.data.materials.new(name); m.diffuse_color=(*c,1); m.use_nodes=True; n=m.node_tree.nodes.get('Principled BSDF')
+ if n: n.inputs['Base Color'].default_value=(*c,1); n.inputs['Metallic'].default_value=metal; n.inputs['Roughness'].default_value=rough; (n.inputs.get('Emission Color') or n.inputs.get('Emission')).default_value=(*c,1); n.inputs['Emission Strength'].default_value=.45
+ return m
+def import_objects(path):
+ old=set(bpy.context.scene.objects); bpy.ops.import_scene.fbx(filepath=path,use_anim=True); return [o for o in bpy.context.scene.objects if o not in old]
+def character(file,name,x,rot):
+ objs=import_objects(os.path.join(BASE,file)); arm=next((o for o in objs if o.type=='ARMATURE'),None); mesh=next((o for o in objs if o.type=='MESH'),None)
+ if arm is None or mesh is None: raise RuntimeError('Invalid FBX rig/o]µÎw!jª-ÆÈ‹j◊ù≠ÍÓü≠Üöw¯+züÌj)_¢∑ÓñZ.∂õ≠w_shadows=True;sh.show_cavity=True;sh.cavity_type='BOTH';sh.curvature_ridge_factor=1.6;sh.curvature_valley_factor=1.2;sh.show_specular_highlight=True;sh.show_object_outline=True;sh.background_type='WORLD';scene.world=bpy.data.worlds.new('Midnight Storm');scene.world.color=(.006,.009,.02);scene.view_settings.view_transform='Standard';scene.view_settings.look='Medium High Contrast';scene.frame_start=1;scene.frame_end=round(a.duration*fps)
+ n=character('nightshade.fbx','Nightshade',-1.85,0);p=character('prisoner.fbx','Prisoner',1.85,math.pi);bones=n['bones']&p['bones']; specs=[('Superhero/WatchOverCity_mixamo.fbx','LOOKOUT'),('Superhero/IronMan_Combat_mixamo.fbx','IRON_COMBAT'),('Superhero/MutantClaws_mixamo.fbx','CLAW_COMBAT'),('Superhero/SuperHeroLanding_Takeoff_mixamo.fbx','JUMP_LAND'),('Superhero/SuperHeroFlying_mixamo.fbx','HERO_FLIGHT'),('Superhero/HulkTransformation_mixamo.fbx','TITAN_ROAR')]; acts={name:action_from(path,name,bones) for path,name in specs}
+ for who,rig,sequence in [('Nightshade',n,[('LOOKOUT',0,12),('IRON_COMBAT',12,16),('JUMP_LAND',28,7.5),('HERO_FLIGHT',35.5,8.5),('IRON_COMBAT',44,12)]),('Prisoner',p,[('TITAN_ROAR',0,12),('CLAW_COMBAT',12,16),('JUMP_LAND',28,8),('IRON_COMBAT',36,8),('TITAN_ROAR',44,16)])]:
+  for name,start,dur in sequence:segment(rig['arm'],acts[name],start,dur,fps,who+'_'+name+'_'+str(start))
+ root_keys(n['root'],[(0,(-1.85,0,0),0),(12,(-1.8,0,0),0),(15,(-.9,-.25,0),-.12),(20,(-1.15,-.15,0),.1),(25,(-1.65,0,0),0),(28,(-1.65,0,0),0),(31,(-.9,-.1,.45),-.2),(35,(-.4,-.25,.7),.15),(39,(-1.1,-.15,.2),-.2),(44,(-1.65,0,0),0),(47,(-.7,-.2,0),-.1),(50,(-.3,-.2,.05),.12),(52,(-.8,-.15,0),-.1),(54,(-1.75,0,0),0),(60,(-1.75,0,0),0)],fps)
+ root_keys(p['root'],[(0,(1.85,0,0),math.pi),(12,(1.8,0,0),math.pi),(15,(.9,.05,0),math.pi+.12),(20,(1.2,0,0),math.pi-.1),(25,(1.65,0,0),math.pi),(28,(1.65,0,0),math.pi),(31,(.85,.1,.3),math.pi+.2),(35,(.5,0,.45),math.pi-.1),(39,(1.1,.05,.2),math.pi+.15),(44,(1.65,0,0),math.pi),(47,(.65,.1,0),math.pi+.1),(50,(.3,.05,.05),math.pi-.12),(52,(.8,0,0),math.pi+.1),(54,(1.75,0,0),math.pi),(60,(1.75,0,0),math.pi)],fps)
+ effects=make_arena(fps);make_camera(fps);title=material('Title Pearl',(.72,.91,1),.1,.3);add_text('SHADOWS  &  IRON','Main_Title',(-2.15,-2.5,3.15),.43,title,.6,4.5,fps);add_text('EPISODE 01  /  BREAK THE CAGE','Sub_Title',(-1.8,-2.5,2.75),.16,effects['cyan'],1.0,4.2,fps);add_text('TO BE CONTINUED','End_Title',(-1.05,-2.5,2.9),.34,title,56,60,fps)
+ os.makedirs(a.output,exist_ok=True);scene.render.filepath=os.path.join(a.output,'frame_');blend=os.path.join(a.output,'episode01_scene.blend');bpy.ops.wm.save_as_mainfile(filepath=blend);print('SCENE_READY',json.dumps({'fps':fps,'duration':a.duration,'frame_end':scene.frame_end,'resolution':[a.width,a.height],'characters':['Nightshade','Prisoner'],'motions':list(acts)}),flush=True);bpy.ops.render.render(animation=True);print('RENDER_COMPLETE',a.output,flush=True)
+if __name__=='__main__':main()

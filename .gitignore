@@ -24,3 +24,12 @@ output/
 .DS_Store
 .vscode/
 .idea/
+
+# Private Episode 01 assets and generated production media (never commit these)
+assets/private/
+assets/episode01-private/
+audio/*.wav
+audio/*.mp3
+*.blend
+*.blend1
+render/
