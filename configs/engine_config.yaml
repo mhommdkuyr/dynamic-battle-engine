@@ -1,0 +1,37 @@
+render:
+  width: 1920
+  height: 1080
+  fps: 60
+  duration_seconds: 5.0
+  background_color: [18, 18, 24]
+
+camera:
+  base_fov: 50.0
+  max_zoom_factor: 1.6
+  shake:
+    trauma_decay_rate: 0.92
+    max_translation_x: 45.0
+    max_translation_y: 35.0
+    max_rotation_degrees: 6.5
+    frequency: 32.0
+
+effects:
+  smear_frames:
+    enabled: true
+    min_velocity_threshold: 18.0
+    stretch_multiplier: 2.2
+    alpha_decay: 0.65
+  action_lines:
+    enabled: true
+    density: 24
+    line_length_min: 150
+    line_length_max: 420
+    color: [240, 240, 255]
+    alpha: 0.75
+  impact_frames:
+    enabled: true
+    duration_frames: 2
+    color_inversion: true
+    flash_color: [255, 255, 255]
+    shockwave_rings: 3
+    shockwave_max_radius: 350

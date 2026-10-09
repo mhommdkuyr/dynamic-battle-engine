@@ -1,0 +1,37 @@
+{
+  "name": "dynamic-battle-engine",
+  "version": "1.0.0",
+  "description": "High-speed combat animation engine inspired by Combat Gods II (Smear Frames, Dynamic Camera, Impact Frames, MCP Server)",
+  "main": "dist/mcp_server/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/mcp_server/server.js",
+    "remotion:preview": "remotion preview src/remotion/Root.tsx",
+    "remotion:render": "remotion render src/remotion/Root.tsx CombatScene out/combat.mp4",
+    "test": "python3 -m unittest discover tests"
+  },
+  "keywords": [
+    "animation",
+    "combat",
+    "action",
+    "blender",
+    "grease-pencil",
+    "remotion",
+    "mcp",
+    "smear-frames",
+    "impact-frames"
+  ],
+  "author": "mhommdkuyr",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "remotion": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}

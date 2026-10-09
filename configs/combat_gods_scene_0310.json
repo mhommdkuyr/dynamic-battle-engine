@@ -1,0 +1,54 @@
+{
+  "scene_name": "Combat_Gods_II_0310_Clash",
+  "reference": {
+    "video_url": "https://youtu.be/XEtHpGSSTOU",
+    "timestamp_start": "03:10",
+    "style": "Ultra-fast martial arts exchange, high-speed smear frames, dynamic trauma camera, inverted impact frames"
+  },
+  "timeline_events": [
+    {
+      "frame": 0,
+      "event": "idle_approach",
+      "p1": {"x": 300, "y": 750, "state": "dash_forward", "velocity": [35, 0]},
+      "p2": {"x": 1620, "y": 750, "state": "dash_forward", "velocity": [-35, 0]},
+      "camera": {"zoom": 1.0, "trauma": 0.0, "target": [960, 540]}
+    },
+    {
+      "frame": 18,
+      "event": "clash_impact",
+      "p1": {"x": 910, "y": 720, "state": "straight_punch", "velocity": [5, 0]},
+      "p2": {"x": 1010, "y": 720, "state": "cross_block", "velocity": [-5, 0]},
+      "camera": {"zoom": 1.35, "trauma": 0.95, "target": [960, 720]},
+      "impact": {"active": true, "duration": 2, "shockwave": true, "flash": true}
+    },
+    {
+      "frame": 24,
+      "event": "rapid_punch_rush_p1",
+      "p1": {"x": 920, "y": 720, "state": "flurry_punches", "velocity": [25, -10]},
+      "p2": {"x": 1020, "y": 720, "state": "parry_guard", "velocity": [0, 0]},
+      "camera": {"zoom": 1.45, "trauma": 0.45, "target": [970, 700]}
+    },
+    {
+      "frame": 48,
+      "event": "counter_spin_kick_p2",
+      "p1": {"x": 880, "y": 720, "state": "evade_duck", "velocity": [-10, 15]},
+      "p2": {"x": 1040, "y": 660, "state": "roundhouse_smear", "velocity": [-45, -5]},
+      "camera": {"zoom": 1.25, "trauma": 0.6, "target": [960, 680]}
+    },
+    {
+      "frame": 60,
+      "event": "lethal_impact_blow",
+      "p1": {"x": 750, "y": 640, "state": "hit_recoil", "velocity": [-55, -20]},
+      "p2": {"x": 1000, "y": 660, "state": "kick_extension", "velocity": [0, 0]},
+      "camera": {"zoom": 1.55, "trauma": 1.0, "target": [850, 650]},
+      "impact": {"active": true, "duration": 3, "shockwave": true, "flash": true}
+    },
+    {
+      "frame": 85,
+      "event": "wall_impact_rebound",
+      "p1": {"x": 250, "y": 720, "state": "ground_recovery", "velocity": [0, 0]},
+      "p2": {"x": 950, "y": 720, "state": "combat_stance", "velocity": [0, 0]},
+      "camera": {"zoom": 1.1, "trauma": 0.3, "target": [600, 700]}
+    }
+  ]
+}
