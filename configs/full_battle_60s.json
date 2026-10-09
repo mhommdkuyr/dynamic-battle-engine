@@ -1,0 +1,65 @@
+{
+  "title": "High-Stakes Trio Clash - 60s Cinematic Combat",
+  "duration_seconds": 60.0,
+  "fps": 60,
+  "total_frames": 3600,
+  "characters": {
+    "char1_girl": {
+      "name": "Hikari",
+      "archetype": "Lightning Speedster",
+      "primary_color": "#FFE600",
+      "role": "Agile Flanker"
+    },
+    "char2_dark_boy": {
+      "name": "Ren",
+      "archetype": "Kinetic Brawler",
+      "primary_color": "#00E5FF",
+      "role": "Frontline Rushdown"
+    },
+    "char3_blond_boy": {
+      "name": "Leo",
+      "archetype": "Starlight Powerhouse",
+      "primary_color": "#FF5722",
+      "role": "Heavy Impact / Zone Control"
+    }
+  },
+  "environment": {
+    "type": "Stormy Industrial Wasteland",
+    "weather": "Heavy Rain & Volumetric Lightning",
+    "parallax_layers": [
+      "distant_mountains",
+      "industrial_ruins",
+      "foreground_rubble"
+    ]
+  },
+  "acts": [
+    {
+      "act": 1,
+      "name": "The Standoff & Ignition",
+      "time_range": "00:00 - 00:15 (Frames 0 - 900)",
+      "camera": "Wide establishing slow push-in, low-angle tilts, depth-of-field rack focus",
+      "vfx": "Rain streaks, puddle ripples, ambient mist, lightning flashes reflecting on visors"
+    },
+    {
+      "act": 2,
+      "name": "Tag-Team Rush & Lightning Exchange",
+      "time_range": "00:15 - 00:30 (Frames 900 - 1800)",
+      "camera": "High-speed lateral tracking, Dutch roll (±8 deg), dynamic push-in zoom",
+      "vfx": "Smear frame capsules, radial speed lines, rapid parry sparks, shockwave rings"
+    },
+    {
+      "act": 3,
+      "name": "Aerial Escalation & Heavy Impacts",
+      "time_range": "00:30 - 00:45 (Frames 1800 - 2700)",
+      "camera": "Vertical crane follow, rotational 3D orbit around airborne clashes",
+      "vfx": "Dual monochrome impact frames (2-3 frames duration), ground-shattering debris, energy trails"
+    },
+    {
+      "act": 4,
+      "name": "Synchronized Climax & Impact Finish",
+      "time_range": "00:45 - 01:00 (Frames 2700 - 3600)",
+      "camera": "Trauma decay screen shake (trauma=1.0), extreme close-up to ultra-wide recoil snap",
+      "vfx": "Screen-inverting flash, expanding shockwave dome, dust clearing, dynamic freeze-frame outro"
+    }
+  ]
+}
