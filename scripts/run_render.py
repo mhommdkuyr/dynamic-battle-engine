@@ -9,18 +9,18 @@ from src.engines.opencv_renderer import CombatRenderer
 from src.core.timeline import Timeline
 
 def main():
-    print("=== Dynamic Battle Engine: Headless Combat Renderer ===")
+    print("=== Dynamic Battle Engine: Headless Combat Renderer (GitHub Actions CI/CD) ===")
     config_file = "configs/combat_gods_scene_0310.json"
     timeline = Timeline(config_file)
     renderer = CombatRenderer(width=1280, height=720, fps=60)
 
     os.makedirs("output", exist_ok=True)
-    video_path = "output/combat_clash_0310.mp4"
+    raw_video = "output/combat_clash_raw.mp4"
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(video_path, fourcc, 60.0, (1280, 720))
+    out = cv2.VideoWriter(raw_video, fourcc, 60.0, (1280, 720))
 
-    total_frames = 90
-    print(f"Rendering {total_frames} frames (Clash at Frame 18, Recoil at Frame 60)...")
+    total_frames = 120  # 2.0 seconds at 60 FPS
+    print(f"Rendering {total_frames} frames (60 FPS)...")
 
     for f in range(total_frames):
         ev = timeline.get_event_at_frame(f)
@@ -40,7 +40,15 @@ def main():
             print(f"Saved keyframe snapshot: {snapshot_path}")
 
     out.release()
-    print(f"Render complete! Video saved to: {video_path}")
+    print("Raw render completed. Transcoding with FFmpeg to H.264 for publishing...")
+
+    final_video = "output/combat_clash_60fps_ready_to_publish.mp4"
+    cmd = f"ffmpeg -y -i '{raw_video}' -c:v libx264 -preset fast -pix_fmt yuv420p '{final_video}'"
+    res = os.system(cmd)
+    if res == 0:
+        print(f"✅ Video ready for publishing generated at: {final_video}")
+    else:
+        print(f"⚠️ FFmpeg remux failed, raw video kept at: {raw_video}")
 
 if __name__ == "__main__":
     main()
