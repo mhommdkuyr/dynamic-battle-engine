@@ -1,0 +1,118 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "AnythingV5_PrtRE.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple"
+  },
+  "2": {
+    "inputs": {
+      "model_name": "v3_sd15_mm.ckpt",
+      "beta_schedule": "sqrt_linear (AnimateDiff)",
+      "model": ["1", 0]
+    },
+    "class_type": "AnimateDiffLoaderWithContext"
+  },
+  "3": {
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_openpose.pth"
+    },
+    "class_type": "ControlNetLoader"
+  },
+  "4": {
+    "inputs": {
+      "control_net_name": "control_v11f1p_sd15_depth.pth"
+    },
+    "class_type": "ControlNetLoader"
+  },
+  "5": {
+    "inputs": {
+      "text": "masterpiece, best quality, high-budget anime sakuga, 1boy nightshade cyber assassin in sleek dark armor with glowing katana, clashing against 1boy prisoner b styperek giant muscular warrior with armored iron gauntlets, heavy rain, electrical sparks, volumetric lighting, dynamic combat pose, extreme action angle, 60fps, ufotable style",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "6": {
+    "inputs": {
+      "text": "low quality, bad anatomy, deformed limbs, floating artifacts, bad hands, mutated fingers, blurry, static, dull colors, lowres",
+      "clip": ["1", 1]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "7": {
+    "inputs": {
+      "strength": 0.85,
+      "conditioning": ["5", 0],
+      "control_net": ["3", 0],
+      "image": ["15", 0]
+    },
+    "class_type": "ControlNetApply"
+  },
+  "8": {
+    "inputs": {
+      "seed": 428192837,
+      "steps": 25,
+      "cfg": 7.5,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["2", 0],
+      "positive": ["7", 0],
+      "negative": ["6", 0],
+      "latent_image": ["9", 0]
+    },
+    "class_type": "KSampler"
+  },
+  "9": {
+    "inputs": {
+      "width": 896,
+      "height": 512,
+      "batch_size": 32
+    },
+    "class_type": "EmptyLatentImage"
+  },
+  "10": {
+    "inputs": {
+      "samples": ["8", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEDecode"
+  },
+  "11": {
+    "inputs": {
+      "ckpt_name": "rife47.pth",
+      "clear_cache_after_n_frames": 20,
+      "multiplier": 4,
+      "frames": ["10", 0]
+    },
+    "class_type": "RIFE_VFI"
+  },
+  "12": {
+    "inputs": {
+      "model_name": "RealESRGAN_x4plus_anime_6B.pth"
+    },
+    "class_type": "UpscaleModelLoader"
+  },
+  "13": {
+    "inputs": {
+      "upscale_model": ["12", 0],
+      "image": ["11", 0]
+    },
+    "class_type": "ImageUpscaleWithModel"
+  },
+  "14": {
+    "inputs": {
+      "fps": 60,
+      "filename_prefix": "Episode01_ShadowsAndIron_60FPS_4K",
+      "format": "video/h264-mp4",
+      "images": ["13", 0]
+    },
+    "class_type": "VHS_VideoCombine"
+  },
+  "15": {
+    "inputs": {
+      "image": "openpose_fbx_mocap_clash_sequence.png"
+    },
+    "class_type": "LoadImage"
+  }
+}
