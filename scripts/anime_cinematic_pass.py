@@ -353,7 +353,8 @@ class RuinedAnimeEnvironment:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', required=True)
+    parser.add_argument('--input', required=True, help='Original source frames used for detection and the audio track')
+    parser.add_argument('--base-video', default=None, help='Optional aligned repaint output to enhance without repeating the repaint pass')
     parser.add_argument('--output', required=True)
     parser.add_argument('--start', type=float, default=0.0)
     parser.add_argument('--duration', type=float, default=0.0, help='0 processes to the source end')
@@ -366,11 +367,26 @@ def main():
     src = pathlib.Path(args.input)
     out = pathlib.Path(args.output)
     out.parent.mkdir(parents=True,exist_ok=True)
-    cap = cv2.VideoCapture(str(src))
-    if not cap.isOpened():
-        raise RuntimeError('Cannot open source: '+str(src))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    reference_cap = None
+    if args.base_video:
+        reference_cap = cv2.VideoCapture(str(src))
+        cap = cv2.VideoCapture(str(args.base_video))
+        if not reference_cap.isOpened() or not cap.isOpened():
+            raise RuntimeError('Cannot open original source or base video.')
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        ref_fps = reference_cap.get(cv2.CAP_PROP_FPS) or 24.0
+        ref_total = int(reference_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if abs(ref_fps-fps) > 0.01 or ref_total != total_frames:
+            raise ValueError('Base video must match the source frame rate and frame count.')
+        if (int(reference_cap.get(cv2.CAP_PROP_FRAME_WIDTH)),int(reference_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))) != (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))):
+            raise ValueError('Base video and original source must have matching frame dimensions.')
+    else:
+        cap = cv2.VideoCapture(str(src))
+        if not cap.isOpened():
+            raise RuntimeError('Cannot open source: '+str(src))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     start_frame = max(0,int(round(args.start*fps)))
@@ -378,6 +394,8 @@ def main():
     if start_frame >= total_frames or end_frame <= start_frame:
         raise ValueError('Requested frame range is outside source video.')
     cap.set(cv2.CAP_PROP_POS_FRAMES,start_frame)
+    if reference_cap is not None:
+        reference_cap.set(cv2.CAP_PROP_POS_FRAMES,start_frame)
 
     temp_video = out.with_name(out.stem+'_video_only.mp4')
     log_path = out.with_name(out.stem+'_encode.log')
@@ -400,9 +418,16 @@ def main():
         ok,frame=cap.read()
         if not ok:
             break
-        source_frame=frame.copy()
-        base_stats=Counter()
-        result=repaint_frame(frame,idx,fps,base_stats)
+        if reference_cap is not None:
+            ok_source, source_frame = reference_cap.read()
+            if not ok_source:
+                break
+            result = frame.copy()
+            base_stats = Counter()
+        else:
+            source_frame=frame.copy()
+            base_stats=Counter()
+            result=repaint_frame(frame,idx,fps,base_stats)
         candidates=detect_head_candidates(source_frame)
         smoothed=[]
         for cand in candidates:
@@ -436,6 +461,8 @@ def main():
                   ' frames; heads='+str(stats['heads_detected'])+
                   '; elapsed='+str(round(time.time()-t0,1))+'s',flush=True)
     cap.release()
+    if reference_cap is not None:
+        reference_cap.release()
     proc.stdin.close()
     code=proc.wait()
     encode_log.close()
@@ -460,7 +487,7 @@ def main():
         temp_video.replace(out)
 
     report={
-        'input':str(src),'output':str(out),
+        'input':str(src),'base_video':str(args.base_video) if args.base_video else None,'output':str(out),
         'source_resolution':[width,height],'output_resolution':[target_w,target_h],
         'fps':fps,'source_total_frames':total_frames,'processed_frames':stats['frames'],
         'start_frame':start_frame,'end_frame_exclusive':start_frame+stats['frames'],
