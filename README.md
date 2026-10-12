@@ -98,3 +98,16 @@ npm run remotion:preview
 npm run build
 npm start
 ```
+
+
+---
+
+## 🎬 CPU Episode Production Pipeline
+
+The automated **Prism Break — Three Forces** pipeline builds an original episode with a real Blender 3D camera and rigs, then falls back to the validated OpenCV CPU renderer if the full 3D render exceeds its CPU budget. It verifies MP4 duration, resolution, frame rate, video/audio streams, exports a workflow artifact, and creates a GitHub Release.
+
+- [CPU animation pipeline and setup guide](docs/CPU_ANIMATION_PIPELINE.md)
+- [Run history and downloadable artifacts](https://github.com/mhommdkuyr/dynamic-battle-engine/actions)
+- [Latest release assets](https://github.com/mhommdkuyr/dynamic-battle-engine/releases)
+
+Google Drive integration is optional and uses repository Actions secrets. Reference motion analyses are diagnostic outputs only; the generated camera path, choreography, characters, and soundtrack are authored independently.
