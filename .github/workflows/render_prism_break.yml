@@ -1,0 +1,87 @@
+name: Render Prism Break Original Animation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/render_prism_break.py"
+      - ".github/workflows/render_prism_break.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render-original-animation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install rendering dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy opencv-python-headless
+
+      - name: Validate renderer
+        run: |
+          python -m py_compile scripts/render_prism_break.py
+
+      - name: Render full original episode
+        run: |
+          mkdir -p output
+          python scripts/render_prism_break.py \
+            --output output/Prism_Break_Original_720p24.mp4 \
+            --duration 291.318 \
+            --fps 24
+
+      - name: Verify duration, resolution, frame rate, and non-empty output
+        run: |
+          test -s output/Prism_Break_Original_720p24.mp4
+          python - <<'PY'
+          import json, subprocess
+          p = "output/Prism_Break_Original_720p24.mp4"
+          result = subprocess.run(
+              ["ffprobe", "-v", "error", "-show_entries",
+               "format=duration:stream=codec_type,width,height,avg_frame_rate",
+               "-of", "json", p], capture_output=True, text=True, check=True
+          )
+          data = json.loads(result.stdout)
+          video = next(s for s in data["streams"] if s["codec_type"] == "video")
+          audio = next(s for s in data["streams"] if s["codec_type"] == "audio")
+          duration = float(data["format"]["duration"])
+          assert (video["width"], video["height"]) == (1280, 720), video
+          assert video["avg_frame_rate"] == "24/1", video
+          assert abs(duration - 291.318) < 0.25, duration
+          print({"duration_seconds": duration, "video": video, "audio": audio})
+          with open("output/render_verification.json", "w") as f:
+              json.dump({"duration_seconds": duration, "video": video,
+                         "audio": audio, "verified": True}, f, indent=2)
+          PY
+
+      - name: Upload finished video and preview frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prism-Break-Original-720p24
+          path: |
+            output/Prism_Break_Original_720p24.mp4
+            output/Prism_Break_Original_720p24.json
+            output/prism_break_ground_clash.png
+            output/prism_break_gold_entry.png
+            output/prism_break_orbit.png
+            output/prism_break_final_burst.png
+            output/render_verification.json
+          if-no-files-found: error
+          retention-days: 30
