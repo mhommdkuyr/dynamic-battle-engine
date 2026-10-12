@@ -14,79 +14,67 @@ from repaint_reference import repaint_frame
 
 
 def detect_head_candidates(source):
-    """Detect only strong, circle-like head regions; reject most smears and impact rings."""
+    """Track the cyan and crimson fighter heads using their own colored rims."""
     h, w = source.shape[:2]
     small = cv2.resize(source, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
     hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
     gray = cv2.medianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), 5)
     circles = cv2.HoughCircles(
-        gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=25,
-        param1=100, param2=28, minRadius=14, maxRadius=120
+        gray, cv2.HOUGH_GRADIENT, dp=1.15, minDist=28,
+        param1=95, param2=25, minRadius=10, maxRadius=105
     )
     candidates = []
-    red = (((hsv[:, :, 0] <= 15) | (hsv[:, :, 0] >= 168)) &
-           (hsv[:, :, 1] > 35) & (hsv[:, :, 2] > 30))
-    dark = (hsv[:, :, 2] < 65) & (hsv[:, :, 1] < 120)
+    # This episode uses a cyan/blue fighter and a crimson/red fighter, not
+    # the red-vs-black palette assumed by the earlier reference-footage pass.
+    blue = ((hsv[:, :, 0] >= 78) & (hsv[:, :, 0] <= 137) &
+            (hsv[:, :, 1] >= 48) & (hsv[:, :, 2] >= 35))
+    red = (((hsv[:, :, 0] <= 16) | (hsv[:, :, 0] >= 168)) &
+           (hsv[:, :, 1] >= 48) & (hsv[:, :, 2] >= 35))
     yy, xx = np.ogrid[:small.shape[0], :small.shape[1]]
-    angles = np.arange(0, 2 * np.pi, 0.15)
+    angles = np.arange(0, 2 * np.pi, 0.12)
 
     if circles is not None:
         for sx, sy, sr in np.round(circles[0]).astype(int):
-            dist2 = (xx - sx) ** 2 + (yy - sy) ** 2
-            core = dist2 < (sr * 0.62) ** 2
-            if not core.any():
+            if sr < 10 or sx < 0 or sy < 0 or sx >= small.shape[1] or sy >= small.shape[0]:
                 continue
-            red_ratio = float(red[core].mean())
-            dark_ratio = float(dark[core].mean())
+            dist2 = (xx - sx) ** 2 + (yy - sy) ** 2
+            # The outlined helmet/face ring is more useful than its dark center.
+            ring = (dist2 >= (sr * 0.58) ** 2) & (dist2 <= (sr * 1.02) ** 2)
+            if not np.any(ring):
+                continue
+            blue_ratio = float(blue[ring].mean())
+            red_ratio = float(red[ring].mean())
             ix = np.clip(np.round(sx + sr * 0.78 * np.cos(angles)).astype(int), 0, small.shape[1] - 1)
             iy = np.clip(np.round(sy + sr * 0.78 * np.sin(angles)).astype(int), 0, small.shape[0] - 1)
-            ox = np.clip(np.round(sx + sr * 1.08 * np.cos(angles)).astype(int), 0, small.shape[1] - 1)
-            oy = np.clip(np.round(sy + sr * 1.08 * np.sin(angles)).astype(int), 0, small.shape[0] - 1)
+            ox = np.clip(np.round(sx + sr * 1.16 * np.cos(angles)).astype(int), 0, small.shape[1] - 1)
+            oy = np.clip(np.round(sy + sr * 1.16 * np.sin(angles)).astype(int), 0, small.shape[0] - 1)
             contrast = float(np.mean(np.abs(gray[iy, ix].astype(np.int16) - gray[oy, ox].astype(np.int16))))
-            red_edge = float(np.mean(red[iy, ix] & ~red[oy, ox]))
-            dark_edge = float(np.mean(dark[iy, ix] & ~dark[oy, ox]))
-            if red_ratio > 0.72 and contrast > 18 and red_edge > 0.42:
-                candidates.append((sx * 2, sy * 2, sr * 2, "azure", contrast, red_ratio))
-            elif dark_ratio > 0.80 and contrast > 25 and dark_edge > 0.35:
-                candidates.append((sx * 2, sy * 2, sr * 2, "obsidian", contrast, dark_ratio))
-
-    # A conservative fallback for upright red silhouettes when blur defeats the circle detector.
-    if not any(c[3] == "azure" for c in candidates):
-        hsv_full = cv2.cvtColor(source, cv2.COLOR_BGR2HSV)
-        red_full = (((hsv_full[:, :, 0] <= 15) | (hsv_full[:, :, 0] >= 168)) &
-                    (hsv_full[:, :, 1] >= 45) & (hsv_full[:, :, 2] >= 35)).astype(np.uint8) * 255
-        n, labels, stats, _ = cv2.connectedComponentsWithStats(red_full, 8)
-        fallback = []
-        for label in range(1, n):
-            x, y, bw, bh, area = [int(v) for v in stats[label]]
-            if (area < 9000 or bw < 50 or bh < 250 or bh / max(1, bw) < 1.6 or
-                    bw > w * 0.32 or y < 1 or x < 4 or x + bw >= w - 4):
+            color_ratio = max(blue_ratio, red_ratio)
+            if color_ratio < 0.075 or contrast < 9:
                 continue
-            radius = int(max(35, min(bw * 0.43, bh * 0.085, 96)))
-            cx = x + bw // 2
-            cy = y + min(int(bh * 0.12), int(radius * 1.05))
-            fill = area / max(1, bw * bh)
-            if fill > 0.10 and cy - radius * 0.65 > 0 and cy + radius < h:
-                fallback.append((cx, cy, radius, "azure", 0.0, fill))
-        if fallback:
-            candidates.append(max(fallback, key=lambda c: c[5]))
+            kind = "azure" if blue_ratio >= red_ratio else "obsidian"
+            score = contrast + sr * 0.12 + color_ratio * 80
+            candidates.append((sx * 2, sy * 2, sr * 2, kind, score, color_ratio))
 
+    # Select one stable, largest confident head per fighter palette and reject
+    # overlapping false circles (knees, impact rings and skyline details).
     selected = []
     for kind in ("azure", "obsidian"):
-        group = [c for c in candidates if c[3] == kind and c[2] >= 34]
-        if group:
-            best = max(group, key=lambda c: c[4] + c[2] * 0.03 + c[5] * 20)
-            if all(math.hypot(best[0] - o[0], best[1] - o[1]) > max(best[2], o[2]) * 0.62 for o in selected):
-                selected.append(best)
+        group = [c for c in candidates if c[3] == kind and c[2] >= 18]
+        group.sort(key=lambda c: c[4] + c[2] * 0.16, reverse=True)
+        for cand in group:
+            if all(math.hypot(cand[0] - other[0], cand[1] - other[1]) >
+                   max(cand[2], other[2]) * 0.78 for other in selected):
+                selected.append(cand)
+                break
     return selected
-
 
 def draw_anime_head(frame, candidate, opponent_x=None):
     """Paint two original, skin-tone-free anime fighter designs inside tracked source head regions."""
     cx, cy, radius, kind, _, _ = candidate
     cx, cy, radius = int(cx), int(cy), int(radius)
     h, w = frame.shape[:2]
-    if radius < 34 or cx < -radius or cx > w + radius or cy < -radius or cy > h + radius:
+    if radius < 18 or cx < -radius or cx > w + radius or cy < -radius or cy > h + radius:
         return
     direction = 1 if opponent_x is None or opponent_x >= cx else -1
     overlay = frame.copy()
@@ -209,9 +197,10 @@ def add_armour_segments(source, result, candidates):
     h, w = source.shape[:2]
     hsv = cv2.cvtColor(source, cv2.COLOR_BGR2HSV)
     masks = {
-        "azure": ((((hsv[:, :, 0] <= 15) | (hsv[:, :, 0] >= 168)) &
-                   (hsv[:, :, 1] >= 45) & (hsv[:, :, 2] >= 35)).astype(np.uint8) * 255),
-        "obsidian": (((hsv[:, :, 2] < 55) & (hsv[:, :, 1] < 115)).astype(np.uint8) * 255),
+        "azure": (((hsv[:, :, 0] >= 78) & (hsv[:, :, 0] <= 137) &
+                   (hsv[:, :, 1] >= 48) & (hsv[:, :, 2] >= 35)).astype(np.uint8) * 255),
+        "obsidian": ((((hsv[:, :, 0] <= 16) | (hsv[:, :, 0] >= 168)) &
+                      (hsv[:, :, 1] >= 48) & (hsv[:, :, 2] >= 35)).astype(np.uint8) * 255),
     }
     for cand in candidates:
         cx, cy, radius, kind = int(cand[0]), int(cand[1]), int(cand[2]), cand[3]
@@ -335,9 +324,79 @@ class RuinedAnimeEnvironment:
             cv2.polylines(self.art,[np.array(pts,np.int32)],True,(139,134,139),1,cv2.LINE_AA)
         self.art = cv2.GaussianBlur(self.art,(3,3),0.25)
 
+        # Architectural detail pass: fractured facade grids, recessed windows,
+        # exposed floor slabs, rebar, vertical shear cracks and foreground rubble.
+        detail = self.art.copy()
+        for bx, bw, top, base in [
+            (int(width*.02), int(width*.13), int(height*.26), horizon+10),
+            (int(width*.18), int(width*.11), int(height*.34), horizon+4),
+            (int(width*.34), int(width*.12), int(height*.20), horizon+12),
+            (int(width*.55), int(width*.13), int(height*.29), horizon+6),
+            (int(width*.76), int(width*.11), int(height*.25), horizon+8),
+            (int(width*.88), int(width*.10), int(height*.38), horizon+12),
+        ]:
+            bx = max(0, min(width-2, bx))
+            bw = max(28, min(width-bx-1, bw))
+            top = max(5, min(horizon-8, top))
+            base = max(top+30, min(height-1, base))
+            facade = [(bx,base),(bx+int(bw*.04),top+int(height*.035)),
+                      (bx+int(bw*.22),top),(bx+int(bw*.48),top+int(height*.012)),
+                      (bx+int(bw*.69),top-int(height*.008)),
+                      (bx+bw,top+int(height*.025)),(bx+bw,base)]
+            cv2.fillPoly(detail,[np.array(facade,np.int32)],(79,82,93),cv2.LINE_AA)
+            cv2.polylines(detail,[np.array(facade,np.int32)],True,(151,151,158),2,cv2.LINE_AA)
+            cols = max(2, bw//22)
+            rows = max(2, (base-top)//25)
+            cell_w = max(8, bw//cols)
+            cell_h = max(12, (base-top)//rows)
+            for row in range(rows):
+                for col in range(cols):
+                    wx = bx+5+col*cell_w
+                    wy = top+7+row*cell_h
+                    ww = max(4,cell_w-7)
+                    wh = max(5,cell_h-8)
+                    if wx+ww >= width or wy+wh >= base:
+                        continue
+                    broken = ((row*7+col*11+bx//3) % 6 in (0,1))
+                    glass = (27,31,42) if broken else ((116,131,151) if (row+col)%4==0 else (39,46,59))
+                    cv2.rectangle(detail,(wx,wy),(wx+ww,wy+wh),glass,-1,cv2.LINE_AA)
+                    cv2.rectangle(detail,(wx,wy),(wx+ww,wy+wh),(103,108,120),1,cv2.LINE_AA)
+                    if broken:
+                        cv2.line(detail,(wx+1,wy+2),(wx+ww-1,wy+wh-2),(80,86,98),1,cv2.LINE_AA)
+            for k in range(3):
+                yy0 = top+int((base-top)*(k+1)/4)
+                cv2.line(detail,(bx+2,yy0),(bx+bw-int(bw*.08),yy0+2),(111,113,124),1,cv2.LINE_AA)
+            crack = np.array([
+                (bx+int(bw*.24),top+int(height*.05)),
+                (bx+int(bw*.34),top+int(height*.09)),
+                (bx+int(bw*.27),top+int(height*.13)),
+                (bx+int(bw*.42),top+int(height*.18)),
+                (bx+int(bw*.37),min(base-3,top+int(height*.24))),
+            ],np.int32)
+            cv2.polylines(detail,[crack],False,(38,41,53),2,cv2.LINE_AA)
+            cv2.line(detail,(bx+int(bw*.24),top+int(height*.05)),
+                     (bx+int(bw*.16),top+int(height*.12)),(53,56,68),1,cv2.LINE_AA)
+            for bar in range(3):
+                rx = bx+int(bw*(.35+.13*bar))
+                roof_y = top+int(height*.02)
+                cv2.line(detail,(rx,roof_y),(rx+(-2 if bar%2 else 3),max(0,roof_y-int(height*.035))),
+                         (135,105,82),2,cv2.LINE_AA)
+        self.art = detail
+
     def apply(self, original, result):
         hsv = cv2.cvtColor(original,cv2.COLOR_BGR2HSV)
-        bg = ((hsv[:,:,1] < 65) & (hsv[:,:,2] > 52) & (hsv[:,:,2] < 218))
+        # Protect both fighters, including their dark interiors, before adding
+        # dense city architecture to the surrounding shadows and neutral areas.
+        hue, sat, val = hsv[:,:,0], hsv[:,:,1], hsv[:,:,2]
+        blue_subject = (hue >= 78) & (hue <= 137) & (sat >= 45) & (val >= 25)
+        red_subject = ((hue <= 16) | (hue >= 168)) & (sat >= 45) & (val >= 25)
+        subject = (blue_subject | red_subject).astype(np.uint8) * 255
+        guard_size = max(15, int(round(min(self.width,self.height)*.045)) | 1)
+        guard = cv2.dilate(subject, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(guard_size,guard_size)))
+        subject_guard = guard > 0
+        neutral_bg = (sat < 95) & (val > 24) & (val < 218)
+        shadow_bg = (val < 62)
+        bg = (neutral_bg | shadow_bg) & ~subject_guard
         count = int(np.count_nonzero(bg))
         if count < original.shape[0]*original.shape[1]*.10:
             return result, count
@@ -347,7 +406,8 @@ class RuinedAnimeEnvironment:
             return result, count
         old = result[mask].astype(np.float32)
         set_art = self.art[mask].astype(np.float32)
-        result[mask] = np.clip(old*.42+set_art*.58,0,255).astype(np.uint8)
+        # Keep existing scene lighting visible beneath high-frequency architecture.
+        result[mask] = np.clip(old*.56+set_art*.44,0,255).astype(np.uint8)
         return result, count
 
 
