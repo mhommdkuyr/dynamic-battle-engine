@@ -122,7 +122,8 @@ For user-authorized source footage, `scripts/repaint_reference.py` works directl
 - Preserves source frame order, native frame rate, camera moves, timing, shot transitions, and original audio.
 - Remaps the red combatant into a cyan/blue palette and recolors its red/yellow energy palette.
 - Applies midnight/cyan rim light and clipped helmet/visor/chest-armor artwork to dark silhouettes.
-- Styles compact white-character mattes with a silver/gold armor palette and fitted 2D details.
+- Styles compact white-character mattes with a silver/gold palette and fitted 2D details.
+- Grades neutral midtone environments into a midnight/indigo palette while leaving full-frame white flashes intact.
 - Writes a verification JSON with frame count, frame size, timing, and pixel counts for the repaint masks.
 
 This method retains the original camera and choreography by using the source frames as the exact timebase. It is a mask-driven repaint, not a full generative re-animation: where a character and a glow/weapon/background are the same color or overlap, automatic masks can bleed into adjacent pixels. It cannot guarantee perfect clean-plate reconstruction during occlusions or full-frame flashes.
