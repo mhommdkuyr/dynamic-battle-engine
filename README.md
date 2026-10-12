@@ -142,3 +142,26 @@ python scripts/repaint_reference.py \
 
 A manually triggered GitHub Actions workflow is provided at [Repaint Reference](.github/workflows/repaint_reference.yml). Drive OAuth secrets must be configured in the repository for that workflow to download/upload source media; the connected Drive integration used in this conversation is separate from GitHub Actions secrets.
 
+---
+
+## 🎨 Cinematic Anime Detail Pass (2× Output)
+
+The `scripts/anime_cinematic_pass.py` pipeline adds a second visual-design pass to an aligned 720p repaint:
+
+- Distinct spiked-hair, eye, faceplate, and cheek designs for the two color-coded fighters when a head-like region is detected with sufficient confidence.
+- Additional armor seams clipped to the detected fighter mattes.
+- A frame-stable ruined-city backdrop with damaged windows, fractured ground perspective, and rubble, composited only into eligible neutral midtone regions.
+- Lanczos 2× scaling to **2560×1440**, H.264 at the chosen CRF, with bounded encoder lookahead for constrained memory environments.
+- Optional `--base-video` input so the previous repaint can be enhanced without repeating its colour-mapping pass.
+
+Example:
+
+```bash
+python scripts/anime_cinematic_pass.py \
+  --input reference_original.mp4 \
+  --base-video Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
+  --output output/Red_vs_Black_2023_Cinematic_Anime_Detail_1440p.mp4 \
+  --crf 15 --preset medium --scale 2 --mux-audio
+```
+
+**Production limitations:** The output keeps the source frame order, camera moves, poses, timing, and audio; it is a stylized image-processing enhancement, not a new frame-by-frame animation production. Hair and facial overlays are deliberately applied only when the head detector is confident, so they are not guaranteed on every frame, during smears, cuts, or occlusions. The 1440p frame size is an upscale from 1280×720 source footage, not native 1440p detail or a full generative/3D reconstruction of the characters and environment. Achieving a true studio-grade anime episode requires more complete character mattes, persistent multi-frame tracking, clean-plate reconstruction, authored character rigs, and shot-specific compositing.
