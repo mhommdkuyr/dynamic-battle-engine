@@ -407,7 +407,7 @@ def main():
         '-filter_threads','1','-filter_complex_threads','1',
         '-f','rawvideo','-pix_fmt','bgr24','-s',str(width)+'x'+str(height),
         '-r',str(fps),'-i','pipe:0','-an','-vf',vf,
-        '-c:v','libx264','-threads','1','-x264-params','threads=1:lookahead-threads=1',
+        '-c:v','libx264','-threads','1','-x264-params','threads=1:lookahead-threads=1:rc-lookahead=4:sync-lookahead=0:bframes=2',
         '-preset',args.preset,'-crf',str(args.crf),
         '-pix_fmt','yuv420p','-fps_mode','passthrough','-movflags','+faststart',str(temp_video)
     ]
