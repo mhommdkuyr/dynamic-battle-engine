@@ -401,13 +401,13 @@ def main():
     log_path = out.with_name(out.stem+'_encode.log')
     encode_log = log_path.open('wb')
     target_w,target_h = width*args.scale,height*args.scale
-    vf = 'scale='+str(target_w)+':'+str(target_h)+':flags=lanczos,unsharp=7:7:0.45:5:5:0.10,format=yuv420p'
+    vf = 'scale='+str(target_w)+':'+str(target_h)+':flags=lanczos,format=yuv420p'
     command = [
         'ffmpeg','-y','-hide_banner','-loglevel','error',
         '-filter_threads','1','-filter_complex_threads','1',
         '-f','rawvideo','-pix_fmt','bgr24','-s',str(width)+'x'+str(height),
         '-r',str(fps),'-i','pipe:0','-an','-vf',vf,
-        '-c:v','libx264','-threads','1','-x264-params','threads=1:lookahead-threads=1:rc-lookahead=4:sync-lookahead=0:bframes=2',
+        '-c:v','libx264','-threads','1','-x264-params','threads=1:lookahead-threads=1:rc-lookahead=0:sync-lookahead=0:bframes=0:ref=1:mbtree=0',
         '-preset',args.preset,'-crf',str(args.crf),
         '-pix_fmt','yuv420p','-fps_mode','passthrough','-movflags','+faststart',str(temp_video)
     ]
