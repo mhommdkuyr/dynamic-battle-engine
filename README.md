@@ -111,3 +111,33 @@ The automated **Prism Break — Three Forces** pipeline builds an original episo
 - [Latest release assets](https://github.com/mhommdkuyr/dynamic-battle-engine/releases)
 
 Google Drive integration is optional and uses repository Actions secrets. Reference motion analyses are diagnostic outputs only; the generated camera path, choreography, characters, and soundtrack are authored independently.
+
+
+---
+
+## 🎞️ Frame-Exact 2D Character Repaint
+
+For user-authorized source footage, `scripts/repaint_reference.py` works directly on every original frame instead of reconstructing the entire camera path from sparse tracking:
+
+- Preserves source frame order, native frame rate, camera moves, timing, shot transitions, and original audio.
+- Remaps the red combatant into a cyan/blue palette and recolors its red/yellow energy palette.
+- Applies midnight/cyan rim light and clipped helmet/visor/chest-armor artwork to dark silhouettes.
+- Styles compact white-character mattes with a silver/gold armor palette and fitted 2D details.
+- Writes a verification JSON with frame count, frame size, timing, and pixel counts for the repaint masks.
+
+This method retains the original camera and choreography by using the source frames as the exact timebase. It is a mask-driven repaint, not a full generative re-animation: where a character and a glow/weapon/background are the same color or overlap, automatic masks can bleed into adjacent pixels. It cannot guarantee perfect clean-plate reconstruction during occlusions or full-frame flashes.
+
+### Run it locally
+
+Install Python 3.11+, OpenCV, NumPy and FFmpeg, then run:
+
+```bash
+python -m pip install numpy opencv-python-headless
+python scripts/repaint_reference.py \
+  --input reference_original.mp4 \
+  --output output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
+  --crf 16 --preset veryfast --mux-audio
+```
+
+A manually triggered GitHub Actions workflow is provided at [Repaint Reference](.github/workflows/repaint_reference.yml). Drive OAuth secrets must be configured in the repository for that workflow to download/upload source media; the connected Drive integration used in this conversation is separate from GitHub Actions secrets.
+
