@@ -110,6 +110,17 @@ jobs:
             --output output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 \
             --crf 18 --preset veryfast --scale 2 --output-fps 24 --mux-audio
           test -s output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4
+
+      - name: Master delivery audio at 48 kHz stereo without re-encoding video
+        run: |
+          ffmpeg -y -hide_banner -loglevel error \
+            -i output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 \
+            -map 0:v:0 -map 0:a:0 \
+            -c:v copy -c:a aac -b:a 256k -ar 48000 -ac 2 \
+            -movflags +faststart \
+            output/Shadow_and_Iron_2D_Episode01_FINAL_audio_master.mp4
+          test -s output/Shadow_and_Iron_2D_Episode01_FINAL_audio_master.mp4
+          mv output/Shadow_and_Iron_2D_Episode01_FINAL_audio_master.mp4 output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4
           ffmpeg -v error -i output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 -f null -
 
       - name: Verify final resolution, exact frame count, frame rate, and audio
