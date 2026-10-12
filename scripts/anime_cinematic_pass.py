@@ -204,6 +204,88 @@ def draw_anime_head(frame, candidate, opponent_x=None):
     frame[:] = overlay
 
 
+def add_armour_segments(source, result, candidates):
+    """Add clipped, transverse armor plates to elongated fighter-mask components."""
+    h, w = source.shape[:2]
+    hsv = cv2.cvtColor(source, cv2.COLOR_BGR2HSV)
+    masks = {
+        "azure": ((((hsv[:, :, 0] <= 15) | (hsv[:, :, 0] >= 168)) &
+                   (hsv[:, :, 1] >= 45) & (hsv[:, :, 2] >= 35)).astype(np.uint8) * 255),
+        "obsidian": (((hsv[:, :, 2] < 55) & (hsv[:, :, 1] < 115)).astype(np.uint8) * 255),
+    }
+    for cand in candidates:
+        cx, cy, radius, kind = int(cand[0]), int(cand[1]), int(cand[2]), cand[3]
+        mask = masks[kind]
+        # Remove isolated spark pixels while preserving broad limbs and their joints.
+        clean = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,
+                                 cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(clean, 8)
+        if not (0 <= cx < w and 0 <= cy < h):
+            continue
+        label = int(labels[cy, cx])
+        if label == 0:
+            # Circle centres can sit a few pixels outside the source matte after antialiasing.
+            x1, x2 = max(0, cx-radius//6), min(w, cx+radius//6+1)
+            y1, y2 = max(0, cy-radius//6), min(h, cy+radius//6+1)
+            roi = labels[y1:y2, x1:x2]
+            vals = roi[roi > 0]
+            if vals.size == 0:
+                continue
+            ids, freq = np.unique(vals, return_counts=True)
+            label = int(ids[int(np.argmax(freq))])
+        x, y, bw, bh, area = [int(v) for v in stats[label]]
+        if area < 2500 or bw > w*.82 or bh > h*.82:
+            continue
+        if x < 2 or y < 2 or x+bw >= w-2 or y+bh >= h-2:
+            continue
+        comp = (labels[y:y+bh, x:x+bw] == label)
+        ys, xs = np.where(comp)
+        if len(xs) < 500:
+            continue
+        # PCA finds the limb's own direction, so the armor stripes rotate with the pose.
+        pts = np.column_stack((xs.astype(np.float32), ys.astype(np.float32)))
+        centre = pts.mean(axis=0)
+        cov = np.cov(pts, rowvar=False)
+        vals, vecs = np.linalg.eigh(cov)
+        axis = vecs[:, int(np.argmax(vals))]
+        minor = np.array([-axis[1], axis[0]], dtype=np.float32)
+        along = (pts-centre) @ axis
+        across = (pts-centre) @ minor
+        long_span = float(along.max()-along.min())
+        short_span = float(across.max()-across.min())
+        if long_span < 150 or long_span/max(1.0,short_span) < 1.75 or short_span < 18:
+            continue
+        accent = (245, 225, 155) if kind == "azure" else (198, 102, 224)
+        shadow = (72, 84, 120) if kind == "azure" else (24, 30, 55)
+        line_mask = np.zeros((bh,bw),np.uint8)
+        step = max(45, min(105, int(short_span*1.30)))
+        positions = np.arange(along.min()+step*.45, along.max()-step*.25, step)
+        for pos in positions:
+            mid = centre + axis*pos
+            p1 = tuple(np.round(mid-minor*short_span*.39).astype(int))
+            p2 = tuple(np.round(mid+minor*short_span*.39).astype(int))
+            p1 = (int(np.clip(p1[0],0,bw-1)),int(np.clip(p1[1],0,bh-1)))
+            p2 = (int(np.clip(p2[0],0,bw-1)),int(np.clip(p2[1],0,bh-1)))
+            cv2.line(line_mask,p1,p2,255,max(2,int(min(6,short_span*.06))),cv2.LINE_AA)
+        etched=(line_mask>0)&comp
+        if np.any(etched):
+            roi=result[y:y+bh,x:x+bw]
+            before=roi[etched].astype(np.float32)
+            col=np.array(accent,np.float32)
+            roi[etched]=np.clip(before*.28+col*.72,0,255).astype(np.uint8)
+            # Narrow secondary shadow lines create separated armor plates instead of plain tubes.
+            shadow_mask=np.zeros((bh,bw),np.uint8)
+            for pos in positions:
+                mid=centre+axis*(pos+max(3,short_span*.10))
+                p1=tuple(np.round(mid-minor*short_span*.33).astype(int))
+                p2=tuple(np.round(mid+minor*short_span*.33).astype(int))
+                p1=(int(np.clip(p1[0],0,bw-1)),int(np.clip(p1[1],0,bh-1)))
+                p2=(int(np.clip(p2[0],0,bw-1)),int(np.clip(p2[1],0,bh-1)))
+                cv2.line(shadow_mask,p1,p2,255,max(1,int(min(3,short_span*.025))),cv2.LINE_AA)
+            m=(shadow_mask>0)&comp
+            roi[m]=np.array(shadow,np.uint8)
+
+
 class RuinedAnimeEnvironment:
     """Stable ruined skyline, fractured concrete, and foreground rubble."""
     def __init__(self, width, height):
@@ -259,9 +341,13 @@ class RuinedAnimeEnvironment:
         count = int(np.count_nonzero(bg))
         if count < original.shape[0]*original.shape[1]*.10:
             return result, count
-        old = result[bg].astype(np.float32)
-        set_art = self.art[bg].astype(np.float32)
-        result[bg] = np.clip(old*.70+set_art*.30,0,255).astype(np.uint8)
+        art_mask = cv2.cvtColor(self.art,cv2.COLOR_BGR2GRAY) > 5
+        mask = bg & art_mask
+        if not np.any(mask):
+            return result, count
+        old = result[mask].astype(np.float32)
+        set_art = self.art[mask].astype(np.float32)
+        result[mask] = np.clip(old*.42+set_art*.58,0,255).astype(np.uint8)
         return result, count
 
 
@@ -326,6 +412,7 @@ def main():
                 cand=(int(.72*cand[0]+.28*prior[0]),int(.72*cand[1]+.28*prior[1]),
                       int(.82*cand[2]+.18*prior[2]),cand[3],cand[4],cand[5])
             smoothed.append(cand)
+        add_armour_segments(source_frame,result,smoothed)
         for cand in smoothed:
             opponents=[other[0] for other in smoothed if other[3]!=cand[3]]
             draw_anime_head(result,cand,opponents[0] if opponents else None)
@@ -385,7 +472,7 @@ def main():
         'red_pixels_repainted':stats['red_pixels'],'energy_pixels_repainted':stats['yellow_fx_pixels'],
         'white_pixels_treated':stats['white_character_pixels'],
         'camera_motion_frame_order_and_audio':'source timebase and frame order preserved; audio copied when --mux-audio is used',
-        'quality_note':'1440p is a high-quality 2x upscale of 720p source, with newly rendered lines and artwork; it is not native 1440p footage or a full generative scene reconstruction'
+        'quality_note':'1440p is a high-quality 2x upscale of 720p source, with added manga hair/face overlays on confidently detected head-like regions, clipped armor seams, and stylized ruined-city/concrete detail; it is not native 1440p footage or a full generative scene reconstruction'
     }
     out.with_suffix('.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print('ANIME_ENHANCEMENT_COMPLETE '+json.dumps(report),flush=True)
