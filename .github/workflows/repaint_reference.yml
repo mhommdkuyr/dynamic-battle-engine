@@ -140,8 +140,9 @@ jobs:
             ["ffmpeg","-hide_banner","-i","output/Red_vs_Black_2023_Cinematic_1440p24.mp4",
              "-vn","-af","volumedetect","-f","null","-"],
             text=True,capture_output=True,check=True)
-          match = re.search(r"mean_volume:\\s*(-?\\d+(?:\\.\\d+)?|-inf) dB",volume.stderr)
-          assert match and match.group(1) != "-inf", volume.stderr[-2000:]
+          volume_lines = [line for line in volume.stderr.splitlines() if "mean_volume:" in line]
+          mean_db = volume_lines[-1].split("mean_volume:",1)[1].strip().split()[0] if volume_lines else "-inf"
+          assert mean_db != "-inf", volume.stderr[-2000:]
           report = {
             "verified": True,
             "source_video_stream": sv,
