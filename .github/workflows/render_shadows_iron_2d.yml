@@ -29,8 +29,10 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install 2D renderer dependencies
+      - name: Install FFmpeg and 2D renderer dependencies
         run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install numpy pillow
           ffmpeg -version | head -n 1
