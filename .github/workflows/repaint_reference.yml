@@ -15,6 +15,11 @@ on:
         description: "x264 encoding preset"
         required: true
         default: "veryfast"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/anime_cinematic_pass.py"
+      - ".github/workflows/repaint_reference.yml"
 
 permissions:
   contents: write
@@ -56,7 +61,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install numpy opencv-python-headless
-          python -m py_compile scripts/repaint_reference.py scripts/drive_io.py
+          python -m py_compile scripts/repaint_reference.py scripts/drive_io.py scripts/anime_cinematic_pass.py
 
       - name: Validate required Drive OAuth secrets
         run: |
@@ -88,7 +93,18 @@ jobs:
             --preset "${{ inputs.preset }}" \
             --mux-audio
 
-      - name: Verify exact source-frame timing, frame count, audio, and resolution
+      - name: Add cinematic hair, face, armor, and ruined-environment pass at 1440p24
+        run: |
+          python scripts/anime_cinematic_pass.py \
+            --input input/reference_original.mp4 \
+            --base-video output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
+            --output output/Red_vs_Black_2023_Cinematic_1440p24.mp4 \
+            --crf 16 --preset veryfast --scale 2 --output-fps 24 --mux-audio
+          test -s output/Red_vs_Black_2023_Cinematic_1440p24.mp4
+          test -s output/Red_vs_Black_2023_Cinematic_1440p24.json
+          ffmpeg -v error -i output/Red_vs_Black_2023_Cinematic_1440p24.mp4 -f null -
+
+      - name: Verify exact timing, 1440p24 frame count, audio and decode integrity
         run: |
           python - <<'PY'
           import json, subprocess
@@ -100,35 +116,52 @@ jobs:
               text=True, capture_output=True, check=True).stdout)
           final = json.loads(subprocess.run(
               ["ffprobe", "-v", "error", "-count_frames", "-show_entries",
-               "format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate,nb_read_frames,duration",
-               "-of", "json", "output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4"],
+               "format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate,nb_read_frames,duration,sample_rate,channels",
+               "-of", "json", "output/Red_vs_Black_2023_Cinematic_1440p24.mp4"],
               text=True, capture_output=True, check=True).stdout)
           sv = next(s for s in source["streams"] if s["codec_type"] == "video")
           fv = next(s for s in final["streams"] if s["codec_type"] == "video")
           fa = next(s for s in final["streams"] if s["codec_type"] == "audio")
-          assert (fv["width"],fv["height"]) == (int(sv["width"]),int(sv["height"])), (sv,fv)
-          assert fv["avg_frame_rate"] == sv["avg_frame_rate"], (sv,fv)
-          assert int(fv["nb_read_frames"]) == int(sv["nb_read_frames"]), (sv,fv)
+          source_fps = float(sv["avg_frame_rate"].split("/")[0]) / float(sv["avg_frame_rate"].split("/")[1])
+          source_frame_count = int(sv["nb_read_frames"])
+          target_frame_count = round(source_frame_count / source_fps * 24)
+          assert (int(sv["width"]),int(sv["height"])) == (1280,720), sv
+          assert (int(fv["width"]),int(fv["height"])) == (2560,1440), fv
+          assert fv["avg_frame_rate"] == "24/1", fv
+          assert int(fv["nb_read_frames"]) == target_frame_count, (int(fv["nb_read_frames"]),target_frame_count)
           assert fa["codec_name"] in ("aac","mp3","ac3","opus","vorbis"), fa
-          duration_delta = abs(float(final["format"]["duration"])-float(source["format"]["duration"]))
-          assert duration_delta < 0.15, (source["format"]["duration"], final["format"]["duration"])
+          assert int(fa.get("sample_rate", "48000")) > 0, fa
+          source_duration = float(source["format"]["duration"])
+          final_duration = float(final["format"]["duration"])
+          duration_delta = abs(final_duration-source_duration)
+          assert duration_delta < 0.15, (source_duration,final_duration)
+          import re
+          volume = subprocess.run(
+            ["ffmpeg","-hide_banner","-i","output/Red_vs_Black_2023_Cinematic_1440p24.mp4",
+             "-vn","-af","volumedetect","-f","null","-"],
+            text=True,capture_output=True,check=True)
+          match = re.search(r"mean_volume:\\s*(-?\\d+(?:\\.\\d+)?|-inf) dB",volume.stderr)
+          assert match and match.group(1) != "-inf", volume.stderr[-2000:]
           report = {
             "verified": True,
             "source_video_stream": sv,
             "final_video_stream": fv,
             "final_audio_stream": fa,
-            "source_duration_seconds": float(source["format"]["duration"]),
-            "final_duration_seconds": float(final["format"]["duration"]),
+            "source_duration_seconds": source_duration,
+            "final_duration_seconds": final_duration,
             "duration_delta_seconds": duration_delta,
-            "source_frame_count": int(sv["nb_read_frames"]),
+            "source_frame_count": source_frame_count,
             "final_frame_count": int(fv["nb_read_frames"]),
-            "camera_and_choreography": "preserved from each original source frame",
-            "character_treatment": "red -> cyan-blue armor; dark -> midnight/cyan armor; eligible white fighter mattes -> silver-gold armor",
+            "expected_output_frame_count_at_24fps": target_frame_count,
+            "camera_motion_and_frame_order": "source timebase retained; CFR output set to 24 fps",
             "source_audio": "retained and copied from the reference",
-            "environment_treatment": "neutral midtones shifted to midnight/indigo; full white flashes excluded",
-            "method": "per-frame pixel mattes, palette remapping, and mask-clipped 2D armor/visor overpaint"
+            "character_treatment": "color-specific character repaint plus stable hair, face, and armor overlays",
+            "environment_treatment": "stylized ruined-city/concrete detail, applied to eligible regions",
+            "method": "per-frame masks and mask-clipped 2D overpaint with Lanczos 2x upscale",
+            "audio_mean_volume_db": float(match.group(1)),
+            "full_file_decode_test": "passed"
           }
-          Path("output/repaint_verification.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
+          Path("output/cinematic_1440p24_verification.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
           print(json.dumps(report,indent=2))
           PY
 
@@ -137,7 +170,9 @@ jobs:
         with:
           name: Frame-Exact-2D-Cast-Repaint
           path: |
-            output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4
+            output/Red_vs_Black_2023_Cinematic_1440p24.mp4
+            output/Red_vs_Black_2023_Cinematic_1440p24.json
+            output/cinematic_1440p24_verification.json
             output/repaint_verification.json
             output/source_probe.json
             output/reference_source.json
@@ -149,22 +184,23 @@ jobs:
         continue-on-error: true
         run: |
           python scripts/drive_io.py upload-final \
-            --input output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
-            --name "Red_vs_Black_2023_Custom_2D_Cast_720p_run${{ github.run_number }}.mp4"
+            --input output/Red_vs_Black_2023_Cinematic_1440p24.mp4 \
+            --name "Red_vs_Black_2023_Cinematic_1440p24_run${{ github.run_number }}.mp4"
 
       - name: Publish verified repaint to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: frame-repaint-${{ github.run_id }}-${{ github.run_attempt }}
-          name: "Frame-Exact Character Repaint (run ${{ github.run_number }})"
+          tag_name: cinematic-repaint-1440p24-${{ github.run_id }}-${{ github.run_attempt }}
+          name: "Cinematic 2D Cast — 1440p24 (run ${{ github.run_number }})"
           body: |
-            The original camera, action timing and frame order are kept directly from the authorized source frames.
-            Red is repainted into a cyan-blue armored fighter, dark silhouettes receive midnight/cyan armor cues,
-            compact white-character mattes receive silver/gold overpaint, and neutral environments receive a midnight/indigo grade.
-            Original source audio, frame order, camera motion and timing are retained.
+            Frame-based recolor and character-design pass on the user-authorized source footage.
+            Original source frame order/camera timing are preserved, output is constant-frame-rate 24 fps,
+            output dimensions are 2560x1440, and the source soundtrack is retained.
+            Hair/face/armor overlays and a stylized ruined-city environment pass are added where detection is confident.
+            This is a mask-based repaint and upscale, not perfect generative clean-plate reconstruction.
           files: |
-            output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4
-            output/repaint_verification.json
+            output/Red_vs_Black_2023_Cinematic_1440p24.mp4
+            output/cinematic_1440p24_verification.json
           fail_on_unmatched_files: false
           draft: false
           prerelease: false
