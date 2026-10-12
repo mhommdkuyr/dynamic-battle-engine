@@ -361,6 +361,7 @@ def main():
     parser.add_argument('--crf', type=int, default=15)
     parser.add_argument('--preset', default='medium')
     parser.add_argument('--scale', type=int, default=2, choices=(1,2))
+    parser.add_argument('--output-fps', type=float, default=0.0, help='Optional constant-frame-rate output; input frame order is retained with rate conversion only as needed')
     parser.add_argument('--mux-audio', action='store_true')
     args = parser.parse_args()
 
@@ -389,6 +390,7 @@ def main():
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    output_fps = args.output_fps if args.output_fps > 0 else fps
     start_frame = max(0,int(round(args.start*fps)))
     end_frame = total_frames if args.duration <= 0 else min(total_frames,start_frame+int(round(args.duration*fps)))
     if start_frame >= total_frames or end_frame <= start_frame:
@@ -401,7 +403,8 @@ def main():
     log_path = out.with_name(out.stem+'_encode.log')
     encode_log = log_path.open('wb')
     target_w,target_h = width*args.scale,height*args.scale
-    vf = 'scale='+str(target_w)+':'+str(target_h)+':flags=lanczos,format=yuv420p'
+    fps_filter = ('fps='+format(output_fps,'.6g')+',') if abs(output_fps-fps) > 0.001 else ''
+    vf = fps_filter+'scale='+str(target_w)+':'+str(target_h)+':flags=lanczos,format=yuv420p'
     command = [
         'ffmpeg','-y','-hide_banner','-loglevel','error',
         '-filter_threads','1','-filter_complex_threads','1',
@@ -491,7 +494,8 @@ def main():
     report={
         'input':str(src),'base_video':str(args.base_video) if args.base_video else None,'output':str(out),
         'source_resolution':[width,height],'output_resolution':[target_w,target_h],
-        'fps':fps,'source_total_frames':total_frames,'processed_frames':stats['frames'],
+        'source_fps':fps,'fps':output_fps,'source_total_frames':total_frames,'processed_source_frames':stats['frames'],
+        'expected_output_frames':int(round((end_frame-start_frame)/fps*output_fps)),
         'start_frame':start_frame,'end_frame_exclusive':start_frame+stats['frames'],
         'video_duration_seconds':stats['frames']/fps,'scale_factor':args.scale,
         'crf':args.crf,'preset':args.preset,
