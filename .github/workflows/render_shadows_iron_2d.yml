@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - "scripts/render_bundle/**"
+      - "scripts/anime_cinematic_pass.py"
+      - "scripts/repaint_reference.py"
       - ".github/workflows/render_shadows_iron_2d.yml"
 
 permissions:
@@ -40,7 +42,8 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          pip install numpy pillow
+          pip install numpy pillow opencv-python-headless
+          python -m py_compile scripts/anime_cinematic_pass.py scripts/repaint_reference.py
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
 
@@ -65,35 +68,47 @@ jobs:
           PY
           python -m py_compile scripts/render_2d_episode.py
 
-      - name: Test renderer with a short sample
+      - name: Test native-resolution renderer and cinematic detail pass
         run: |
           mkdir -p output
           python scripts/render_2d_episode.py \
-            --output output/smoke.mp4 --duration 4 --fps 12 \
-            --width 640 --height 360 --preset ultrafast --crf 23
-          ffprobe -v error -show_entries format=duration \
-            -of default=noprint_wrappers=1:nokey=1 output/smoke.mp4
+            --output output/smoke_base_1280x720_24fps.mp4 --duration 4 --fps 24 \
+            --width 1280 --height 720 --preset ultrafast --crf 22
+          python scripts/anime_cinematic_pass.py \
+            --input output/smoke_base_1280x720_24fps.mp4 \
+            --base-video output/smoke_base_1280x720_24fps.mp4 \
+            --output output/smoke_cinematic_1440p24.mp4 \
+            --crf 21 --preset ultrafast --scale 2 --output-fps 24
+          python - <<'PY'
+          import json, subprocess
+          path = "output/smoke_cinematic_1440p24.mp4"
+          data = json.loads(subprocess.run(
+              ["ffprobe", "-v", "error", "-count_frames", "-show_entries",
+               "stream=codec_type,width,height,avg_frame_rate,nb_read_frames",
+               "-of", "json", path], text=True, capture_output=True, check=True).stdout)
+          video = next(s for s in data["streams"] if s["codec_type"] == "video")
+          assert (int(video["width"]),int(video["height"])) == (2560,1440), video
+          assert video["avg_frame_rate"] == "24/1", video
+          assert int(video["nb_read_frames"]) == 96, video
+          print(json.dumps(video,indent=2))
+          PY
+          rm -f output/smoke_base_1280x720_24fps.mp4 output/smoke_cinematic_1440p24.mp4 output/smoke_cinematic_1440p24.json
 
-      - name: Render original armored 2D combat episode at native 24 fps
+      - name: Render detailed 2D episode at native 1280x720 and 24 fps
         run: |
           python scripts/render_2d_episode.py \
-            --output output/Shadow_and_Iron_2D_960x540_24fps.mp4 \
-            --duration 291.25 --fps 24 --width 960 --height 540 \
-            --preset ultrafast --crf 21
-          test -s output/Shadow_and_Iron_2D_960x540_24fps.mp4
+            --output output/Shadow_and_Iron_2D_1280x720_24fps.mp4 \
+            --duration 291.25 --fps 24 --width 1280 --height 720 \
+            --preset ultrafast --crf 20
+          test -s output/Shadow_and_Iron_2D_1280x720_24fps.mp4
 
-      - name: Upscale and encode 1440p24 distribution master
+      - name: Apply cinematic hair, facial features, armor accents and detailed ruined city
         run: |
-          ffmpeg -y -hide_banner -loglevel error \
-            -i output/Shadow_and_Iron_2D_960x540_24fps.mp4 \
-            -map 0:v:0 -map 0:a:0 \
-            -vf "scale=2560:1440:flags=lanczos" \
-            -c:v libx264 -preset veryfast -crf 19 -pix_fmt yuv420p \
-            -r 24 -fps_mode cfr -c:a aac -b:a 192k -ar 48000 -ac 2 \
-            -t 291.25 -movflags +faststart \
-            -metadata title="Shadows and Iron — Original 2D Fight Episode 01 — 1440p24" \
-            -metadata comment="Original 2D character animation rendered at 24 fps and upscaled to 2560x1440" \
-            output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4
+          python scripts/anime_cinematic_pass.py \
+            --input output/Shadow_and_Iron_2D_1280x720_24fps.mp4 \
+            --base-video output/Shadow_and_Iron_2D_1280x720_24fps.mp4 \
+            --output output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 \
+            --crf 18 --preset veryfast --scale 2 --output-fps 24 --mux-audio
           test -s output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4
           ffmpeg -v error -i output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 -f null -
 
@@ -132,7 +147,7 @@ jobs:
           report = {
               "verified": True,
               "title": "Shadows & Iron — Original 2D Fight Episode 01",
-              "renderer": "Pillow 2D renderer at native 24 fps + FFmpeg Lanczos upscale",
+              "renderer": "Pillow 2D renderer at 1280x720/24 fps + OpenCV cinematic detail pass + 2x upscale",
               "duration_seconds": duration,
               "target_duration_seconds": 291.25,
               "resolution": "2560x1440",
@@ -146,7 +161,7 @@ jobs:
               "file_size_bytes": size,
               "full_file_decode_test": "passed",
               "source_reference_frames_or_audio_reused": False,
-              "notes": "Original standalone 2D episode. The output is upscaled to 1440p; it is not a frame-exact repaint of source footage."
+              "notes": "Original standalone 2D episode with added color-tracked hair/face/armor details and architectural ruins. Output is 2x upscaled from a native 1280x720/24fps render; it is not a frame-exact repaint of source footage."
           }
           Path("output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
           print(json.dumps(report, indent=2))
@@ -171,7 +186,9 @@ jobs:
           body: |
             Original action episode with custom armored 2D combatants, energy effects, impact rings,
             environmental scene changes, and a procedural soundtrack.
-            Master target: 2560x1440 at native 24 fps, 6,990 frames, approximately 4m 51.25s.
+            Master target: 2560x1440 at 24 fps, 6,990 frames, approximately 4m 51.25s.
+            Enhanced via color-tracked anime hair/face/armor overlays, more detailed ruined-building facades,
+            broken windows, concrete fractures and exposed rebar. The base animation is rendered at 1280x720/24fps.
             This is an original standalone animation, not a frame-exact repaint of the reference footage.
           files: |
             output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4
@@ -186,3 +203,8 @@ jobs:
           python scripts/drive_io.py upload-final \
             --input output/Shadow_and_Iron_2D_Episode01_FINAL_1440p24.mp4 \
             --name "Shadows_and_Iron_Episode01_1440p24_run${{ github.run_number }}.mp4"
+
+      - name: Report why Google Drive upload was skipped
+        if: env.GOOGLE_DRIVE_CLIENT_ID == '' || env.GOOGLE_DRIVE_CLIENT_SECRET == '' || env.GOOGLE_DRIVE_REFRESH_TOKEN == '' || (env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID == '' && env.GOOGLE_DRIVE_FOLDER_ID == '')
+        run: |
+          echo "::warning::The verified master is published to GitHub Releases, but Drive upload was skipped because one or more Google Drive OAuth/folder secrets are not configured."
