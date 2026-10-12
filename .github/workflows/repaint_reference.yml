@@ -1,0 +1,168 @@
+name: Frame-Exact 2D Character Repaint
+
+on:
+  workflow_dispatch:
+    inputs:
+      reference_name:
+        description: "Drive reference MP4 name"
+        required: true
+        default: "Red vs Black 2023 (by MicroMist)_720p.mp4"
+      crf:
+        description: "H.264 quality (lower is higher quality)"
+        required: true
+        default: "16"
+      preset:
+        description: "x264 encoding preset"
+        required: true
+        default: "veryfast"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frame-exact-repaint-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  repaint-source-frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+      GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+      GOOGLE_DRIVE_OUTPUT_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_OUTPUT_FOLDER_ID }}
+      GOOGLE_DRIVE_REFERENCE_FILE_ID: ${{ secrets.GOOGLE_DRIVE_REFERENCE_FILE_ID }}
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Set up Python and image processing dependencies
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install OpenCV/NumPy
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy opencv-python-headless
+          python -m py_compile scripts/repaint_reference.py scripts/drive_io.py
+
+      - name: Validate required Drive OAuth secrets
+        run: |
+          if [ -z "$GOOGLE_DRIVE_CLIENT_ID" ] || \
+             [ -z "$GOOGLE_DRIVE_CLIENT_SECRET" ] || \
+             [ -z "$GOOGLE_DRIVE_REFRESH_TOKEN" ] || \
+             { [ -z "$GOOGLE_DRIVE_FOLDER_ID" ] && [ -z "$GOOGLE_DRIVE_REFERENCE_FILE_ID" ]; }; then
+            echo "::error::Configure GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET, GOOGLE_DRIVE_REFRESH_TOKEN, and GOOGLE_DRIVE_FOLDER_ID or GOOGLE_DRIVE_REFERENCE_FILE_ID under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Download the exact Drive reference
+        run: |
+          mkdir -p input output
+          export GOOGLE_DRIVE_REFERENCE_NAME="${{ inputs.reference_name }}"
+          python scripts/drive_io.py download-reference \
+            --output input/reference_original.mp4 \
+            --metadata-output output/reference_source.json
+          test -s input/reference_original.mp4
+          ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate \
+            -of json input/reference_original.mp4 > output/source_probe.json
+
+      - name: Repaint original frames with new character palettes and 2D armor
+        run: |
+          python scripts/repaint_reference.py \
+            --input input/reference_original.mp4 \
+            --output output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
+            --crf "${{ inputs.crf }}" \
+            --preset "${{ inputs.preset }}" \
+            --mux-audio
+
+      - name: Verify exact source-frame timing, frame count, audio, and resolution
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          source = json.loads(subprocess.run(
+              ["ffprobe", "-v", "error", "-count_frames", "-show_entries",
+               "format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate,nb_read_frames,duration",
+               "-of", "json", "input/reference_original.mp4"],
+              text=True, capture_output=True, check=True).stdout)
+          final = json.loads(subprocess.run(
+              ["ffprobe", "-v", "error", "-count_frames", "-show_entries",
+               "format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate,nb_read_frames,duration",
+               "-of", "json", "output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4"],
+              text=True, capture_output=True, check=True).stdout)
+          sv = next(s for s in source["streams"] if s["codec_type"] == "video")
+          fv = next(s for s in final["streams"] if s["codec_type"] == "video")
+          fa = next(s for s in final["streams"] if s["codec_type"] == "audio")
+          assert (fv["width"],fv["height"]) == (int(sv["width"]),int(sv["height"])), (sv,fv)
+          assert fv["avg_frame_rate"] == sv["avg_frame_rate"], (sv,fv)
+          assert int(fv["nb_read_frames"]) == int(sv["nb_read_frames"]), (sv,fv)
+          assert fa["codec_name"] in ("aac","mp3","ac3","opus","vorbis"), fa
+          duration_delta = abs(float(final["format"]["duration"])-float(source["format"]["duration"]))
+          assert duration_delta < 0.15, (source["format"]["duration"], final["format"]["duration"])
+          report = {
+            "verified": True,
+            "source_video_stream": sv,
+            "final_video_stream": fv,
+            "final_audio_stream": fa,
+            "source_duration_seconds": float(source["format"]["duration"]),
+            "final_duration_seconds": float(final["format"]["duration"]),
+            "duration_delta_seconds": duration_delta,
+            "source_frame_count": int(sv["nb_read_frames"]),
+            "final_frame_count": int(fv["nb_read_frames"]),
+            "camera_and_choreography": "preserved from each original source frame",
+            "character_treatment": "red -> cyan-blue armor; dark -> midnight/cyan armor; eligible white fighter mattes -> silver-gold armor",
+            "source_audio": "retained and copied from the reference",
+            "method": "per-frame pixel mattes, palette remapping, and mask-clipped 2D armor/visor overpaint"
+          }
+          Path("output/repaint_verification.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Upload verified result as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Frame-Exact-2D-Cast-Repaint
+          path: |
+            output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4
+            output/repaint_verification.json
+            output/source_probe.json
+            output/reference_source.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload output to the configured Drive folder
+        if: env.GOOGLE_DRIVE_CLIENT_ID != '' && env.GOOGLE_DRIVE_CLIENT_SECRET != '' && env.GOOGLE_DRIVE_REFRESH_TOKEN != '' && (env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID != '' || env.GOOGLE_DRIVE_FOLDER_ID != '')
+        continue-on-error: true
+        run: |
+          python scripts/drive_io.py upload-final \
+            --input output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4 \
+            --name "Red_vs_Black_2023_Custom_2D_Cast_720p_run${{ github.run_number }}.mp4"
+
+      - name: Publish verified repaint to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frame-repaint-${{ github.run_id }}-${{ github.run_attempt }}
+          name: "Frame-Exact Character Repaint (run ${{ github.run_number }})"
+          body: |
+            The original camera, action timing and frame order are kept directly from the authorized source frames.
+            Red is repainted into a cyan-blue armored fighter, dark silhouettes receive midnight/cyan armor cues,
+            and compact white-character mattes receive silver/gold overpaint. Original source audio is retained.
+          files: |
+            output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4
+            output/repaint_verification.json
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
