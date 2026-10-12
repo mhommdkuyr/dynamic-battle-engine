@@ -404,9 +404,11 @@ def main():
     vf = 'scale='+str(target_w)+':'+str(target_h)+':flags=lanczos,unsharp=7:7:0.45:5:5:0.10,format=yuv420p'
     command = [
         'ffmpeg','-y','-hide_banner','-loglevel','error',
+        '-filter_threads','1','-filter_complex_threads','1',
         '-f','rawvideo','-pix_fmt','bgr24','-s',str(width)+'x'+str(height),
         '-r',str(fps),'-i','pipe:0','-an','-vf',vf,
-        '-c:v','libx264','-preset',args.preset,'-crf',str(args.crf),
+        '-c:v','libx264','-threads','1','-x264-params','threads=1:lookahead-threads=1',
+        '-preset',args.preset,'-crf',str(args.crf),
         '-pix_fmt','yuv420p','-fps_mode','passthrough','-movflags','+faststart',str(temp_video)
     ]
     proc = subprocess.Popen(command,stdin=subprocess.PIPE,stderr=encode_log,stdout=subprocess.DEVNULL)
