@@ -125,6 +125,7 @@ jobs:
             "camera_and_choreography": "preserved from each original source frame",
             "character_treatment": "red -> cyan-blue armor; dark -> midnight/cyan armor; eligible white fighter mattes -> silver-gold armor",
             "source_audio": "retained and copied from the reference",
+            "environment_treatment": "neutral midtones shifted to midnight/indigo; full white flashes excluded",
             "method": "per-frame pixel mattes, palette remapping, and mask-clipped 2D armor/visor overpaint"
           }
           Path("output/repaint_verification.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
@@ -159,7 +160,8 @@ jobs:
           body: |
             The original camera, action timing and frame order are kept directly from the authorized source frames.
             Red is repainted into a cyan-blue armored fighter, dark silhouettes receive midnight/cyan armor cues,
-            and compact white-character mattes receive silver/gold overpaint. Original source audio is retained.
+            compact white-character mattes receive silver/gold overpaint, and neutral environments receive a midnight/indigo grade.
+            Original source audio, frame order, camera motion and timing are retained.
           files: |
             output/Red_vs_Black_2023_Custom_2D_Cast_720p.mp4
             output/repaint_verification.json
