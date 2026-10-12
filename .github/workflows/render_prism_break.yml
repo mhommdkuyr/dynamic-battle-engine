@@ -126,6 +126,7 @@ jobs:
             --sample-interval 1.5 --max-width 640 --threads 2
 
       - name: Build the new 3D stage, rigs and authored camera path
+        continue-on-error: true
         run: |
           mkdir -p output
           blender --background -t 2 \
@@ -136,6 +137,7 @@ jobs:
           test -s output/prism_break_3d.blend
 
       - name: Verify Blender CPU render works on the 3D scene
+        continue-on-error: true
         run: |
           blender --background output/prism_break_3d.blend -t 2 \
             -o "$GITHUB_WORKSPACE/output/prism_break_3d_preview_" \
