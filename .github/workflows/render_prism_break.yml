@@ -1,28 +1,54 @@
-name: Render Prism Break Original Animation
+name: Prism Break — CPU 3D/2D Animation Pipeline
 
 on:
   workflow_dispatch:
+    inputs:
+      run_colmap:
+        description: "Run optional COLMAP sparse 3D camera analysis on the Drive reference"
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
       - "scripts/render_prism_break.py"
+      - "scripts/build_blender_scene.py"
+      - "scripts/analyze_reference.py"
+      - "scripts/solve_camera_colmap.py"
+      - "scripts/drive_io.py"
+      - "scripts/generate_score.py"
       - ".github/workflows/render_prism_break.yml"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: prism-break-render-\${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  render-original-animation:
+  render-original-episode:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    env:
+      GOOGLE_DRIVE_CLIENT_ID: \${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+      GOOGLE_DRIVE_CLIENT_SECRET: \${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+      GOOGLE_DRIVE_REFRESH_TOKEN: \${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+      GOOGLE_DRIVE_FOLDER_ID: \${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+      GOOGLE_DRIVE_OUTPUT_FOLDER_ID: \${{ secrets.GOOGLE_DRIVE_OUTPUT_FOLDER_ID }}
+      GOOGLE_DRIVE_REFERENCE_FILE_ID: \${{ secrets.GOOGLE_DRIVE_REFERENCE_FILE_ID }}
+      GOOGLE_DRIVE_REFERENCE_NAME: "Red vs Black 2023 (by MicroMist)_720p.mp4"
+
     steps:
-      - name: Checkout source
+      - name: Check out animation project
         uses: actions/checkout@v4
 
-      - name: Install FFmpeg
+      - name: Install CPU rendering tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender ffmpeg
+          blender --version | head -n 2
+          ffmpeg -version | head -n 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,58 +56,218 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install rendering dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install numpy opencv-python-headless
 
-      - name: Validate renderer
+      - name: Compile-check pipeline scripts and run engine tests
         run: |
-          python -m py_compile scripts/render_prism_break.py
+          python -m py_compile \
+            scripts/render_prism_break.py \
+            scripts/build_blender_scene.py \
+            scripts/analyze_reference.py \
+            scripts/solve_camera_colmap.py \
+            scripts/drive_io.py \
+            scripts/generate_score.py
+          python -m unittest discover -s tests -v
 
-      - name: Render full original episode
+      - name: Smoke-test fast CPU renderer
         run: |
           mkdir -p output
           python scripts/render_prism_break.py \
-            --output output/Prism_Break_Original_720p24.mp4 \
-            --duration 291.318 \
-            --fps 24
+            --output output/smoke-test.mp4 --duration 2 --fps 12
+          test -s output/smoke-test.mp4
+          ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 output/smoke-test.mp4
+          rm -f output/smoke-test.mp4 output/smoke-test.json \
+            output/smoke-test_score.wav output/smoke-test_raw.mp4
 
-      - name: Verify duration, resolution, frame rate, and non-empty output
+      - name: Download Drive reference for timing and motion diagnostics
+        id: reference
+        continue-on-error: true
+        run: |
+          if [ -z "$GOOGLE_DRIVE_CLIENT_ID" ] || \
+             [ -z "$GOOGLE_DRIVE_CLIENT_SECRET" ] || \
+             [ -z "$GOOGLE_DRIVE_REFRESH_TOKEN" ] || \
+             { [ -z "$GOOGLE_DRIVE_FOLDER_ID" ] && [ -z "$GOOGLE_DRIVE_REFERENCE_FILE_ID" ]; }; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Reference analysis skipped: Google Drive OAuth secrets are not configured."
+            exit 0
+          fi
+          mkdir -p input output
+          python scripts/drive_io.py download-reference \
+            --output input/reference_timing_only.mp4 \
+            --metadata-output output/reference_download_metadata.json
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Analyze reference duration, scene cuts and image-plane motion
+        if: steps.reference.outputs.available == 'true'
+        continue-on-error: true
+        run: |
+          python scripts/analyze_reference.py \
+            --input input/reference_timing_only.mp4 \
+            --output output/reference_analysis.json \
+            --sample-fps 2 --max-width 640
+
+      - name: Install COLMAP for optional CPU sparse camera solve
+        if: inputs.run_colmap == true && steps.reference.outputs.available == 'true'
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          colmap -h | head -n 2
+
+      - name: Run optional COLMAP CPU camera reconstruction
+        if: inputs.run_colmap == true && steps.reference.outputs.available == 'true'
+        continue-on-error: true
+        run: |
+          python scripts/solve_camera_colmap.py \
+            --input input/reference_timing_only.mp4 \
+            --output output/colmap_camera_poses.json \
+            --sample-interval 1.5 --max-width 640 --threads 2
+
+      - name: Build the new 3D stage, rigs and authored camera path
+        run: |
+          mkdir -p output
+          blender --background -t 2 \
+            --python scripts/build_blender_scene.py -- \
+            --blend-output output/prism_break_3d.blend \
+            --output output/Prism_Break_Original_3D_720p24_video.mp4 \
+            --duration 291.318 --fps 24 --width 1280 --height 720 --threads 2
+          test -s output/prism_break_3d.blend
+
+      - name: Verify Blender CPU render works on the 3D scene
+        run: |
+          blender --background output/prism_break_3d.blend -t 2 \
+            -o "$GITHUB_WORKSPACE/output/prism_break_3d_preview_" \
+            -F PNG -f 480
+          test -s output/prism_break_3d_preview_00480.png
+
+      - name: Render full 3D episode on CPU and add original soundtrack
+        id: render3d
+        continue-on-error: true
+        run: |
+          set +e
+          timeout 25m blender --background output/prism_break_3d.blend -t 2 -a \
+            > output/blender_render.log 2>&1
+          blender_code=$?
+          set -e
+          if [ "$blender_code" -ne 0 ] || \
+             [ ! -s output/Prism_Break_Original_3D_720p24_video.mp4 ] || \
+             [ "$(stat -c%s output/Prism_Break_Original_3D_720p24_video.mp4 2>/dev/null || echo 0)" -lt 100000 ]; then
+            echo "Blender render did not finish in the CPU time window (exit=$blender_code); falling back to the verified OpenCV CPU renderer."
+            tail -n 50 output/blender_render.log || true
+            exit 1
+          fi
+          python scripts/generate_score.py \
+            --output output/prism_break_original_score.wav --duration 291.318
+          ffmpeg -y -loglevel error \
+            -i output/Prism_Break_Original_3D_720p24_video.mp4 \
+            -i output/prism_break_original_score.wav \
+            -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 160k \
+            -t 291.318 -movflags +faststart \
+            output/Prism_Break_Original_720p24_muxed.mp4
+          test -s output/Prism_Break_Original_720p24_muxed.mp4
+          mv output/Prism_Break_Original_720p24_muxed.mp4 output/Prism_Break_Original_720p24.mp4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path("output/Prism_Break_Original_720p24.json").write_text(json.dumps({
+              "title": "Prism Break — Three Forces",
+              "render_backend": "Blender Cycles CPU",
+              "duration_target_seconds": 291.318,
+              "resolution": "1280x720",
+              "fps": 24,
+              "audio": "Original procedurally synthesized score",
+              "reference_frames_or_audio_reused": False
+          }, indent=2), encoding="utf-8")
+          PY
+          echo "backend=blender_cycles_cpu" >> "$GITHUB_OUTPUT"
+
+      - name: Render complete episode with CPU fallback if Blender render is too slow
+        if: steps.render3d.outcome != 'success'
+        run: |
+          rm -f output/Prism_Break_Original_720p24.mp4
+          python scripts/render_prism_break.py \
+            --output output/Prism_Break_Original_720p24.mp4 \
+            --duration 291.318 --fps 24
+          echo "RENDER_BACKEND=opencv_cpu_2.5d" >> "$GITHUB_ENV"
+
+      - name: Record the 3D render backend
+        if: steps.render3d.outcome == 'success'
+        run: echo "RENDER_BACKEND=blender_cycles_cpu" >> "$GITHUB_ENV"
+
+      - name: Verify final MP4 duration, streams, resolution and frame rate
         run: |
           test -s output/Prism_Break_Original_720p24.mp4
           python - <<'PY'
-          import json, subprocess
-          p = "output/Prism_Break_Original_720p24.mp4"
-          result = subprocess.run(
+          import json, os, subprocess
+          path = "output/Prism_Break_Original_720p24.mp4"
+          proc = subprocess.run(
               ["ffprobe", "-v", "error", "-show_entries",
-               "format=duration:stream=codec_type,width,height,avg_frame_rate",
-               "-of", "json", p], capture_output=True, text=True, check=True
+               "format=duration,size:stream=codec_type,codec_name,width,height,avg_frame_rate,duration",
+               "-of", "json", path], capture_output=True, text=True, check=True
           )
-          data = json.loads(result.stdout)
+          data = json.loads(proc.stdout)
           video = next(s for s in data["streams"] if s["codec_type"] == "video")
           audio = next(s for s in data["streams"] if s["codec_type"] == "audio")
           duration = float(data["format"]["duration"])
           assert (video["width"], video["height"]) == (1280, 720), video
           assert video["avg_frame_rate"] == "24/1", video
+          assert audio["codec_name"] == "aac", audio
           assert abs(duration - 291.318) < 0.25, duration
-          print({"duration_seconds": duration, "video": video, "audio": audio})
-          with open("output/render_verification.json", "w") as f:
-              json.dump({"duration_seconds": duration, "video": video,
-                         "audio": audio, "verified": True}, f, indent=2)
+          assert int(data["format"]["size"]) > 1_000_000
+          report = {
+              "verified": True, "render_backend": os.environ.get("RENDER_BACKEND", "unknown"),
+              "duration_seconds": duration, "target_duration_seconds": 291.318,
+              "duration_delta_seconds": round(duration - 291.318, 6),
+              "video_stream": video, "audio_stream": audio,
+              "file_size_bytes": int(data["format"]["size"]),
+              "reference_media_reused": False
+          }
+          with open("output/render_verification.json", "w", encoding="utf-8") as f:
+              json.dump(report, f, indent=2)
+          print(json.dumps(report, indent=2))
           PY
 
-      - name: Upload finished video and preview frames
+      - name: Upload video, source scene and diagnostics as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: Prism-Break-Original-720p24
           path: |
             output/Prism_Break_Original_720p24.mp4
             output/Prism_Break_Original_720p24.json
-            output/prism_break_ground_clash.png
-            output/prism_break_gold_entry.png
-            output/prism_break_orbit.png
-            output/prism_break_final_burst.png
+            output/prism_break_3d.blend
+            output/prism_break_3d_preview_00480.png
+            output/reference_download_metadata.json
+            output/reference_analysis.json
+            output/colmap_camera_poses.json
             output/render_verification.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload final MP4 to Google Drive when OAuth secrets are configured
+        if: env.GOOGLE_DRIVE_CLIENT_ID != '' && env.GOOGLE_DRIVE_CLIENT_SECRET != '' && env.GOOGLE_DRIVE_REFRESH_TOKEN != '' && (env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID != '' || env.GOOGLE_DRIVE_FOLDER_ID != '')
+        continue-on-error: true
+        run: |
+          python scripts/drive_io.py upload-final \
+            --input output/Prism_Break_Original_720p24.mp4 \
+            --name "Prism_Break_Original_720p24_run\${GITHUB_RUN_NUMBER}.mp4"
+
+      - name: Publish MP4 and editable Blender scene to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: prism-break-\${{ github.run_id }}-\${{ github.run_attempt }}
+          name: "Prism Break Original — run \${{ github.run_number }}"
+          body: |
+            Original animated combat episode generated by the Dynamic Battle Engine.
+            - Video: 1280x720, 24 fps, approximately 4:51.
+            - Audio: original procedurally generated soundtrack.
+            - Render backend and verification report are included in the build artifact.
+            - Source frames, source audio and reference camera poses are not used to recreate the original work.
+          files: |
+            output/Prism_Break_Original_720p24.mp4
+            output/prism_break_3d.blend
+            output/render_verification.json
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
