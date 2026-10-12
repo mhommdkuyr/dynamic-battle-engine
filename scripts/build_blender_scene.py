@@ -385,7 +385,7 @@ def configure(scene, duration, fps, width, height, threads):
     scene.render.ffmpeg.format="MPEG4"
     scene.render.ffmpeg.codec="H264"
     scene.render.ffmpeg.constant_rate_factor="HIGH"
-    scene.render.ffmpeg.ffmpeg_preset="ULTRAFAST"
+    scene.render.ffmpeg.ffmpeg_preset="GOOD"
     scene.render.ffmpeg.audio_codec="NONE"
     scene.render.filepath="//Prism_Break_3D_video"
     scene.render.use_file_extension=True
