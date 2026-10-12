@@ -400,7 +400,7 @@ def configure(scene, duration, fps, width, height, threads):
     scene.render.use_sequencer=False
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument("--blend-output",default="output/prism_break_3d.blend")
     parser.add_argument("--output",default="output/Prism_Break_Original_3D_720p24_video.mp4")
@@ -410,7 +410,7 @@ def main():
     parser.add_argument("--height",type=int,default=720)
     parser.add_argument("--threads",type=int,default=2)
     parser.add_argument("--render",action="store_true")
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     if bpy.app.version < (3,6,0):
         raise RuntimeError("Blender 3.6 or newer is required.")
     reset_scene()
@@ -453,5 +453,5 @@ def main():
 
 if __name__=="__main__":
     # Blender uses -- to separate its own flags from script arguments.
-    argv=sys.argv[sys.argv.index("--")+1:] if "--" in sys.argv else []
-    main()
+    script_args=sys.argv[sys.argv.index("--")+1:] if "--" in sys.argv else []
+    main(script_args)
