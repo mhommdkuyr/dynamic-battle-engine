@@ -17,6 +17,7 @@ on:
       - "scripts/solve_camera_colmap.py"
       - "scripts/drive_io.py"
       - "scripts/generate_score.py"
+      - "scripts/render_bundle/**"
       - ".github/workflows/render_prism_break.yml"
 
 permissions:
@@ -59,7 +60,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy opencv-python-headless
+          pip install numpy opencv-python-headless pillow
 
       - name: Compile-check pipeline scripts and run engine tests
         run: |
@@ -146,6 +147,7 @@ jobs:
 
       - name: Render full 3D episode on CPU and add original soundtrack
         id: render3d
+        if: false
         continue-on-error: true
         run: |
           set +e
@@ -176,23 +178,68 @@ jobs:
           Path("output/Prism_Break_Original_720p24.json").write_text(json.dumps({
               "title": "Prism Break — Three Forces",
               "render_backend": "Blender Cycles CPU",
-              "duration_target_seconds": 291.318,
+              "duration_target_seconds": 291.25,
               "resolution": "1280x720",
               "fps": 24,
+              "art_draw_fps": 12,
               "audio": "Original procedurally synthesized score",
               "reference_frames_or_audio_reused": False
           }, indent=2), encoding="utf-8")
           PY
           echo "backend=blender_cycles_cpu" >> "$GITHUB_OUTPUT"
 
-      - name: Render complete episode with CPU fallback if Blender render is too slow
+      - name: Render enhanced 2D fight episode with custom armored characters and energy FX
         if: steps.render3d.outcome != 'success'
+        timeout-minutes: 50
         run: |
           rm -f output/Prism_Break_Original_720p24.mp4
-          python scripts/render_prism_break.py \
-            --output output/Prism_Break_Original_720p24.mp4 \
-            --duration 291.318 --fps 24
-          echo "RENDER_BACKEND=opencv_cpu_2.5d" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import base64, zlib
+          from pathlib import Path
+          root = Path("scripts/render_bundle")
+          ordered = [
+              "part01.b64", "part02a.b64", "part02b.b64", "part02c.b64",
+              "part05.b64", "part06.b64", "part07.b64", "part08.b64",
+              "part09.b64", "part10.b64",
+          ]
+          encoded = "".join((root / name).read_text(encoding="ascii").strip() for name in ordered)
+          raw = zlib.decompress(base64.b64decode(encoded, validate=True))
+          target = Path("scripts/render_2d_episode.py")
+          target.write_bytes(raw)
+          print(f"Recovered enhanced 2D renderer: {len(raw)} bytes")
+          PY
+          python -m py_compile scripts/render_2d_episode.py
+          python scripts/render_2d_episode.py \
+            --output output/Shadow_and_Iron_2D_960x540_12fps.mp4 \
+            --duration 291.25 --fps 12 --width 960 --height 540 \
+            --preset ultrafast --crf 21
+          ffmpeg -y -hide_banner -loglevel error \
+            -i output/Shadow_and_Iron_2D_960x540_12fps.mp4 \
+            -vf "scale=1280:720:flags=lanczos,fps=24" \
+            -c:v libx264 -preset ultrafast -crf 20 -pix_fmt yuv420p \
+            -fps_mode cfr -c:a copy -t 291.25 -movflags +faststart \
+            -metadata title="Shadows and Iron — Original 2D Fight Episode 01" \
+            -metadata comment="Original armored 2D characters, choreography and procedural soundtrack" \
+            output/Prism_Break_Original_720p24.mp4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path("output/Prism_Break_Original_720p24.json").write_text(json.dumps({
+              "title": "Shadows & Iron — Original 2D Fight Episode 01",
+              "render_backend": "custom_pillow_2d_cpu_12fps_upscaled_to_24fps",
+              "duration_target_seconds": 291.25,
+              "art_draw_fps": 12,
+              "output_fps": 24,
+              "source_resolution": "960x540",
+              "output_resolution": "1280x720",
+              "characters": ["Nightshade", "Ironbound"],
+              "features": ["armored articulated silhouettes", "energy katana", "power auras",
+                           "lightning", "impact shock rings", "multi-phase backgrounds",
+                           "cinematic zooms and dutch roll", "original procedural score"],
+              "reference_frames_or_audio_reused": False
+          }, indent=2), encoding="utf-8")
+          PY
+          echo "RENDER_BACKEND=custom_pillow_2d_cpu_12fps_upscaled_to_24fps" >> "$GITHUB_ENV"
 
       - name: Record the 3D render backend
         if: steps.render3d.outcome == 'success'
@@ -216,12 +263,12 @@ jobs:
           assert (video["width"], video["height"]) == (1280, 720), video
           assert video["avg_frame_rate"] == "24/1", video
           assert audio["codec_name"] == "aac", audio
-          assert abs(duration - 291.318) < 0.25, duration
+          assert abs(duration - 291.25) < 0.25, duration
           assert int(data["format"]["size"]) > 1_000_000
           report = {
               "verified": True, "render_backend": os.environ.get("RENDER_BACKEND", "unknown"),
-              "duration_seconds": duration, "target_duration_seconds": 291.318,
-              "duration_delta_seconds": round(duration - 291.318, 6),
+              "duration_seconds": duration, "target_duration_seconds": 291.25,
+              "duration_delta_seconds": round(duration - 291.25, 6),
               "video_stream": video, "audio_stream": audio,
               "file_size_bytes": int(data["format"]["size"]),
               "reference_media_reused": False
@@ -258,12 +305,13 @@ jobs:
       - name: Publish MP4 and editable Blender scene to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: prism-break-${{ github.run_id }}-${{ github.run_attempt }}
-          name: "Prism Break Original — run ${{ github.run_number }}"
+          tag_name: shadows-iron-${{ github.run_id }}-${{ github.run_attempt }}
+          name: "Shadows & Iron — Enhanced 2D Episode 01 (run ${{ github.run_number }})"
           body: |
             Original animated combat episode generated by the Dynamic Battle Engine.
-            - Video: 1280x720, 24 fps, approximately 4:51.
-            - Audio: original procedurally generated soundtrack.
+            - Video: 1280x720, 24 fps output, approximately 4:51; key animation drawings are authored at 12 fps.
+            - Custom articulated 2D armor, energy blade, auras, lightning, shock rings, and original soundtrack.
+            - Blender source scene is included for further 3D development.
             - Render backend and verification report are included in the build artifact.
             - Source frames, source audio and reference camera poses are not used to recreate the original work.
           files: |
