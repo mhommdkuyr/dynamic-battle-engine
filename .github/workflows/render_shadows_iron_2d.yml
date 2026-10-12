@@ -1,0 +1,153 @@
+name: Shadows and Iron — Enhanced 2D Episode
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/render_bundle/**"
+      - ".github/workflows/render_shadows_iron_2d.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shadows-iron-2d-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  render-episode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the production source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install 2D renderer dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pillow
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Rebuild the enhanced renderer from repository bundle
+        run: |
+          python - <<'PY'
+          import base64, zlib
+          from pathlib import Path
+          root = Path("scripts/render_bundle")
+          ordered = [
+              "part01.b64", "part02a.b64", "part02b.b64", "part02c.b64",
+              "part05.b64", "part06.b64", "part07.b64", "part08.b64",
+              "part09.b64", "part10.b64",
+          ]
+          encoded = "".join((root / name).read_text(encoding="ascii").strip() for name in ordered)
+          compressed = base64.b64decode(encoded, validate=True)
+          raw = zlib.decompress(compressed)
+          if len(raw) < 40000:
+              raise RuntimeError(f"Renderer source is too short: {len(raw)} bytes")
+          Path("scripts/render_2d_episode.py").write_bytes(raw)
+          print(f"RENDERER_SOURCE_REBUILT bytes={len(raw)}")
+          PY
+          python -m py_compile scripts/render_2d_episode.py
+
+      - name: Test renderer with a short sample
+        run: |
+          mkdir -p output
+          python scripts/render_2d_episode.py \
+            --output output/smoke.mp4 --duration 4 --fps 12 \
+            --width 640 --height 360 --preset ultrafast --crf 23
+          ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 output/smoke.mp4
+
+      - name: Render original armored 2D combat episode
+        run: |
+          python scripts/render_2d_episode.py \
+            --output output/Shadow_and_Iron_2D_960x540_12fps.mp4 \
+            --duration 291.25 --fps 12 --width 960 --height 540 \
+            --preset ultrafast --crf 21
+
+      - name: Upscale and encode final distribution MP4
+        run: |
+          ffmpeg -y -hide_banner -loglevel error \
+            -i output/Shadow_and_Iron_2D_960x540_12fps.mp4 \
+            -vf "scale=1280:720:flags=lanczos,fps=24" \
+            -c:v libx264 -preset ultrafast -crf 20 -pix_fmt yuv420p \
+            -fps_mode cfr -c:a copy -t 291.25 -movflags +faststart \
+            -metadata title="Shadows and Iron — Original 2D Fight Episode 01" \
+            -metadata comment="Original armored 2D characters, choreography and procedural soundtrack" \
+            output/Shadow_and_Iron_2D_Episode01_FINAL.mp4
+
+      - name: Verify final video streams, frame rate, and duration
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          path = "output/Shadow_and_Iron_2D_Episode01_FINAL.mp4"
+          proc = subprocess.run(
+              ["ffprobe", "-v", "error", "-count_frames", "-show_entries",
+               "format=duration,size:stream=codec_name,codec_type,width,height,avg_frame_rate,nb_read_frames,duration",
+               "-of", "json", path], text=True, capture_output=True, check=True
+          )
+          data = json.loads(proc.stdout)
+          video = next(s for s in data["streams"] if s["codec_type"] == "video")
+          audio = next(s for s in data["streams"] if s["codec_type"] == "audio")
+          duration = float(data["format"]["duration"])
+          assert (video["width"], video["height"]) == (1280, 720), video
+          assert video["avg_frame_rate"] == "24/1", video
+          assert audio["codec_name"] == "aac", audio
+          assert abs(duration - 291.25) < 0.25, duration
+          size = int(data["format"]["size"])
+          assert size > 1_000_000, size
+          report = {
+              "verified": True,
+              "title": "Shadows & Iron — Original 2D Fight Episode 01",
+              "renderer": "Pillow 2D scene renderer + FFmpeg",
+              "art_draw_fps": 12,
+              "distribution_fps": 24,
+              "duration_seconds": duration,
+              "target_duration_seconds": 291.25,
+              "resolution": "1280x720",
+              "video_stream": video,
+              "audio_stream": audio,
+              "file_size_bytes": size,
+              "source_reference_frames_or_audio_reused": False,
+              "notes": "24 fps output is made by duplicating 12 fps artwork frames, not motion interpolation."
+          }
+          Path("output/Shadow_and_Iron_2D_Episode01_FINAL.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+          print(json.dumps(report, indent=2))
+          PY
+
+      - name: Upload validated episode as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shadows-and-Iron-Enhanced-2D-Final
+          path: |
+            output/Shadow_and_Iron_2D_Episode01_FINAL.mp4
+            output/Shadow_and_Iron_2D_Episode01_FINAL.json
+            scripts/render_2d_episode.py
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish final episode to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: shadows-iron-${{ github.run_id }}-${{ github.run_attempt }}
+          name: "Shadows & Iron — Enhanced 2D Episode 01 (run ${{ github.run_number }})"
+          body: |
+            Original action short episode with newly drawn armored 2D combatants, articulated silhouettes,
+            energy blade, aura/lightning effects, impact shock rings, changing backgrounds, and a procedural score.
+            Distribution video: 1280x720 at 24 fps (artwork is rendered at 12 fps, duplicated to 24 fps).
+            No source reference video frames or source audio are reused.
+          files: |
+            output/Shadow_and_Iron_2D_Episode01_FINAL.mp4
+            output/Shadow_and_Iron_2D_Episode01_FINAL.json
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
