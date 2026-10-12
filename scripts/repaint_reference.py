@@ -136,8 +136,8 @@ def repaint_frame(frame, frame_index, fps, stats):
         frame = cv2.cvtColor(grade_hsv, cv2.COLOR_HSV2BGR)
 
     # Dark/black fighter stays a black silhouette, with a subtle midnight-blue tint.
-    v2 = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2].astype(np.float32)
     hsv2 = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    v2 = hsv2[:, :, 2].astype(np.float32)
     s2 = hsv2[:, :, 1]
     dark = ((s2 < 85) & (v2 < 44)).astype(np.uint8) * 255
     m = dark > 0
@@ -160,9 +160,9 @@ def repaint_frame(frame, frame_index, fps, stats):
         add_armor_details(frame, neutral_dark, (230, 185, 90), component_min=12000, phase=frame_index)
 
     # Thin plasma halo around the recoloured fighter masks, clipped outside the silhouette.
-    red_now = (((cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 0] >= 87) &
-                (cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 0] <= 113) &
-                (cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1] > 115))).astype(np.uint8) * 255
+    post_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    post_h, post_s = post_hsv[:, :, 0], post_hsv[:, :, 1]
+    red_now = (((post_h >= 87) & (post_h <= 113) & (post_s > 115))).astype(np.uint8) * 255
     if cv2.countNonZero(red_now):
         dil = cv2.dilate(red_now, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
         outer = (dil > 0) & (red_now == 0)
@@ -278,8 +278,12 @@ def main():
         cmd2=['ffmpeg','-y','-hide_banner','-loglevel','error','-i',str(temp_video)]
         if args.start > 0:
             cmd2 += ['-ss',str(args.start)]
-        cmd2 += ['-i',str(src),'-map','0:v:0','-map','1:a:0?','-c:v','copy','-c:a','copy',
-                 '-t',str((end_frame-start_frame)/fps),'-map_metadata','1','-movflags','+faststart',str(audio_tmp)]
+        cmd2 += ['-i',str(src),'-map','0:v:0','-map','1:a:0?','-c:v','copy','-c:a','copy']
+        if args.start == 0 and args.duration <= 0:
+            # Keep the complete original audio stream, including its short tail after the last video frame.
+            cmd2 += ['-map_metadata','1','-movflags','+faststart',str(audio_tmp)]
+        else:
+            cmd2 += ['-t',str((end_frame-start_frame)/fps),'-map_metadata','1','-movflags','+faststart',str(audio_tmp)]
         subprocess.run(cmd2,check=True)
         audio_tmp.replace(out)
         temp_video.unlink(missing_ok=True)
