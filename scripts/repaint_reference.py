@@ -122,6 +122,19 @@ def repaint_frame(frame, frame_index, fps, stats):
         frame[white_sel, 2] = np.clip(160 + values * 0.37, 0, 255).astype(np.uint8)
         white_repainted = white_count
 
+    # Repaint neutral midtone environment pixels into a cinematic midnight/indigo palette.
+    # High-energy white flashes (V >= 210) and saturated character/FX mattes are intentionally excluded.
+    grade_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    gh, gs, gv = cv2.split(grade_hsv)
+    environment_mask = (gs < 42) & (gv > 52) & (gv < 210)
+    environment_pixels = int(np.count_nonzero(environment_mask))
+    if environment_pixels:
+        vfloat = gv[environment_mask].astype(np.float32)
+        grade_hsv[environment_mask, 0] = 112
+        grade_hsv[environment_mask, 1] = np.clip(34 + (vfloat - 52) * 0.36, 35, 100).astype(np.uint8)
+        grade_hsv[environment_mask, 2] = np.clip(vfloat * 0.76 + 14, 38, 190).astype(np.uint8)
+        frame = cv2.cvtColor(grade_hsv, cv2.COLOR_HSV2BGR)
+
     # Dark/black fighter stays a black silhouette, with a subtle midnight-blue tint.
     v2 = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2].astype(np.float32)
     hsv2 = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -205,6 +218,7 @@ def repaint_frame(frame, frame_index, fps, stats):
     stats['red_mask_pixels'] += red_area
     stats['yellow_mask_pixels'] += yellow_area
     stats['white_character_pixels'] += white_repainted
+    stats['environment_pixels'] += environment_pixels
     stats['frames'] += 1
     return frame
 
@@ -275,7 +289,7 @@ def main():
             'processed_frames':stats['frames'],'start_frame':start_frame,'end_frame_exclusive':start_frame+stats['frames'],
             'start_seconds':args.start,'duration_seconds':stats['frames']/fps,'resolution':[width,height],
             'red_pixels_repainted':stats['red_mask_pixels'],'yellow_fx_pixels_repainted':stats['yellow_mask_pixels'],
-            'white_character_pixels_repainted':stats['white_character_pixels'],'frame_order_preserved':True,
+            'white_character_pixels_repainted':stats['white_character_pixels'],'environment_pixels_repainted':stats['environment_pixels'],'frame_order_preserved':True,
             'source_audio_muxed':bool(args.mux_audio),'preserved_source_frame_order':True}
     out.with_suffix('.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print('REPAINT_COMPLETE '+json.dumps(report),flush=True)
