@@ -110,7 +110,17 @@ def repaint_frame(frame, frame_index, fps, stats):
     frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
     if red_area:
         add_armor_details(frame, red, (245, 244, 190), component_min=6500, phase=frame_index)
-    white_repainted = style_white_characters(frame, neutral_white, frame_index)
+    # Vectorized silver-gold treatment for bright neutral character/impact pixels. Keep full-frame flashes white.
+    white_count = int(cv2.countNonZero(neutral_white))
+    white_repainted = 0
+    if 0 < white_count < int(frame.shape[0] * frame.shape[1] * 0.44):
+        white_sel = neutral_white > 0
+        lumw = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        values = lumw[white_sel]
+        frame[white_sel, 0] = np.clip(108 + values * 0.42, 0, 255).astype(np.uint8)
+        frame[white_sel, 1] = np.clip(132 + values * 0.42, 0, 255).astype(np.uint8)
+        frame[white_sel, 2] = np.clip(160 + values * 0.37, 0, 255).astype(np.uint8)
+        white_repainted = white_count
 
     # Dark/black fighter stays a black silhouette, with a subtle midnight-blue tint.
     v2 = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2].astype(np.float32)
@@ -133,7 +143,8 @@ def repaint_frame(frame, frame_index, fps, stats):
         glow = np.array([188, 92, 70], dtype=np.float32)  # BGR
         frame[rim] = np.clip(old * 0.42 + glow * 0.58, 0, 255).astype(np.uint8)
 
-    add_armor_details(frame, neutral_dark, (230, 185, 90), component_min=12000, phase=frame_index)
+    if int(cv2.countNonZero(neutral_dark)) < int(frame.shape[0] * frame.shape[1] * 0.46):
+        add_armor_details(frame, neutral_dark, (230, 185, 90), component_min=12000, phase=frame_index)
 
     # Thin plasma halo around the recoloured fighter masks, clipped outside the silhouette.
     red_now = (((cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 0] >= 87) &
@@ -264,6 +275,7 @@ def main():
             'processed_frames':stats['frames'],'start_frame':start_frame,'end_frame_exclusive':start_frame+stats['frames'],
             'start_seconds':args.start,'duration_seconds':stats['frames']/fps,'resolution':[width,height],
             'red_pixels_repainted':stats['red_mask_pixels'],'yellow_fx_pixels_repainted':stats['yellow_mask_pixels'],
+            'white_character_pixels_repainted':stats['white_character_pixels'],'frame_order_preserved':True,
             'source_audio_muxed':bool(args.mux_audio),'preserved_source_frame_order':True}
     out.with_suffix('.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print('REPAINT_COMPLETE '+json.dumps(report),flush=True)
