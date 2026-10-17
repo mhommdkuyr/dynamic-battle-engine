@@ -1,0 +1,43 @@
+name: Episode 01 — Arabic anime short
+
+on:
+  push:
+    branches:
+      - feature/moneyprinterturbo-skill-episode-01
+    paths:
+      - "episodes/episode-01-the-three-second-contract/**"
+      - ".github/workflows/episode-01-render.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render-episode-01:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install FFmpeg and Arabic fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-core
+      - name: Install renderer dependencies
+        run: python -m pip install --upgrade pip numpy opencv-python-headless pillow
+      - name: Render episode
+        run: python episodes/episode-01-the-three-second-contract/render_episode_01.py
+      - name: Verify MP4 metadata
+        run: |
+          ffprobe -v error -show_entries format=duration:stream=codec_name,codec_type,width,height,r_frame_rate -of json output/episode_01_the_three_second_contract_ar.mp4
+      - name: Upload MP4 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: episode-01-the-three-second-contract-ar
+          path: output/episode_01_the_three_second_contract_ar.mp4
+          if-no-files-found: error
+          retention-days: 14

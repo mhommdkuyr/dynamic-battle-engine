@@ -1,0 +1,131 @@
+{
+  "title": "العقد ذو الثواني الثلاث",
+  "series": "RXW — Rayan X World",
+  "episode": 1,
+  "language": "ar",
+  "duration_seconds": 52,
+  "output": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "video": "H.264",
+    "audio": "AAC stereo 44100 Hz"
+  },
+  "soundtrack": {
+    "type": "procedural original synth score and sound effects",
+    "human_voiceover": false
+  },
+  "shots": [
+    {
+      "start": 0,
+      "end": 8,
+      "label": "Establishing",
+      "action": "Night city, rooftop perspective, silhouettes of both fighters",
+      "camera": "slow push-in"
+    },
+    {
+      "start": 8,
+      "end": 16,
+      "label": "Confrontation",
+      "action": "Hero and red-lit rival take guard stances; Arabic challenge captions",
+      "camera": "medium-wide, slow drift"
+    },
+    {
+      "start": 16,
+      "end": 25,
+      "label": "Countdown",
+      "action": "Countdown 3-2-1, energy auras pulse and intensify",
+      "camera": "centered graphic, controlled zoom"
+    },
+    {
+      "start": 25,
+      "end": 35,
+      "label": "Clash",
+      "action": "Both fighters dash; speed lines; impact rings and debris",
+      "camera": "short shake on contact, fast reframing"
+    },
+    {
+      "start": 35,
+      "end": 44,
+      "label": "Aftermath",
+      "action": "Dust clears, rival drops to one knee, contract sigil glows",
+      "camera": "settling wide shot"
+    },
+    {
+      "start": 44,
+      "end": 49,
+      "label": "Watcher",
+      "action": "Third silhouette appears on rooftop",
+      "camera": "slow reveal, violet rim light"
+    },
+    {
+      "start": 49,
+      "end": 52,
+      "label": "Title card",
+      "action": "Arabic and English title, to-be-continued hook",
+      "camera": "locked frame"
+    }
+  ],
+  "captions": [
+    {
+      "start": 0.8,
+      "end": 4.7,
+      "text": "في عالمٍ تُقاس فيه الوعود بالثواني…"
+    },
+    {
+      "start": 5.2,
+      "end": 8.2,
+      "text": "لا توجد فرصة ثانية."
+    },
+    {
+      "start": 9,
+      "end": 12.3,
+      "text": "رايان: أمامك ثلاث ثوانٍ لتتراجع."
+    },
+    {
+      "start": 12.8,
+      "end": 15.6,
+      "text": "الخصم: ثلاث ثوانٍ تكفيني."
+    },
+    {
+      "start": 17,
+      "end": 18.5,
+      "text": "ثلاثة…"
+    },
+    {
+      "start": 19,
+      "end": 20.5,
+      "text": "اثنان…"
+    },
+    {
+      "start": 21,
+      "end": 22.5,
+      "text": "واحد!"
+    },
+    {
+      "start": 26.4,
+      "end": 29,
+      "text": "تم تفعيل العقد."
+    },
+    {
+      "start": 35.8,
+      "end": 38.7,
+      "text": "انتهت الثواني."
+    },
+    {
+      "start": 40,
+      "end": 43.5,
+      "text": "رايان: لا… لقد بدأ للتو."
+    },
+    {
+      "start": 45,
+      "end": 48.7,
+      "text": "قوةٌ ثالثة كانت تراقب."
+    }
+  ],
+  "limitations": [
+    "Short-form cut",
+    "No human voiceover",
+    "Procedural vector animation, not studio hand-drawn animation"
+  ]
+}
